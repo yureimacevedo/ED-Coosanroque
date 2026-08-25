@@ -241,11 +241,29 @@
   .back-link:hover{color:var(--accent);}
   .footer-note{font-size:11px; color:var(--ink-faint); text-align:center; margin-top:30px; line-height:1.6;}
 
-  #authGate{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;}
-  #authGate .gate-card{width:100%; max-width:400px;}
-  .gate-choice{display:flex; flex-direction:column; gap:10px; margin-top:22px;}
+  #authGate{min-height:100vh; display:grid; grid-template-columns:1fr 1fr;}
+  @media (max-width:860px){ #authGate{grid-template-columns:1fr; grid-template-rows:auto 1fr;} }
+
+  .auth-visual{
+    position:relative; overflow:hidden; background:var(--accent-deep); color:#EAF0F2;
+    display:flex; align-items:center; padding:56px 60px;
+  }
+  @media (max-width:860px){ .auth-visual{padding:36px 28px 44px;} }
+  .auth-visual-inner{position:relative; z-index:2; max-width:420px;}
+  .auth-headline{font-family:var(--font-display); font-size:34px; font-weight:600; line-height:1.15; margin:26px 0 16px; letter-spacing:-.01em;}
+  @media (max-width:860px){ .auth-headline{font-size:26px; margin:18px 0 10px;} }
+  .auth-tagline{font-size:14px; color:#B7CBD3; line-height:1.65; max-width:380px;}
+  .auth-rings{position:absolute; right:-60px; bottom:-60px; width:420px; height:420px; z-index:1; pointer-events:none;}
+  @media (max-width:860px){ .auth-rings{display:none;} }
+
+  .auth-panel{display:flex; align-items:center; justify-content:center; padding:40px 28px; background:var(--bg);}
+  .auth-panel-inner{width:100%; max-width:380px;}
+  .auth-panel-title{font-family:var(--font-display); font-size:22px; font-weight:600; margin:0 0 6px;}
+  .auth-panel-sub{color:var(--ink-soft); font-size:13px; margin:0 0 22px;}
+
+  .gate-choice{display:flex; flex-direction:column; gap:10px; margin-top:6px;}
   .gate-choice .btn{width:100%; justify-content:center; padding:13px;}
-  .gate-setup{background:var(--clay-pale); border:1px solid var(--clay); color:#7A4529; border-radius:var(--radius); padding:14px 16px; font-size:12.5px; text-align:left; line-height:1.6;}
+  .gate-setup{background:var(--clay-pale); border:1px solid var(--clay); color:#7A4529; border-radius:var(--radius); padding:14px 16px; font-size:12.5px; text-align:left; line-height:1.6; margin-top:4px;}
   .gate-setup code{background:#fff; padding:1px 5px; border-radius:2px; font-family:var(--font-mono);}
   .toggle-link{background:none; border:none; color:var(--accent); font-weight:600; cursor:pointer; text-decoration:underline; font-size:12.5px; padding:0;}
 
@@ -283,189 +301,10 @@ if(!CONFIG_IS_PLACEHOLDER){
   auth = firebase.auth();
   db = firebase.firestore();
 }
-// FieldValueCompat: en modo real usa el sentinel de Firestore; en modo demo, un timestamp numérico simple.
+// FieldValueCompat: usa el sentinel de Firestore para marcas de tiempo del servidor.
 const FieldValueCompat = CONFIG_IS_PLACEHOLDER
   ? { serverTimestamp: () => Date.now() }
   : firebase.firestore.FieldValue;
-
-/* =========================================================
-   MODO DEMO — backend en memoria (sin Firebase) para poder
-   revisar la aplicación completa antes de conectar un proyecto
-   real. Implementa el mismo subconjunto de la API de Firestore
-   compat (collection/doc/onSnapshot/get/set/update/delete/
-   where/orderBy/batch) que usa el resto del código, así que
-   nada más en la app necesita saber si está en modo demo o real.
-   ========================================================= */
-function createMockBackend(){
-  const store = { usuarios:{}, periodos:{}, periodoSubs:{} };
-  const listeners = []; // {kind:'collection'|'doc', pathKey, cb}
-
-  const subKey = (periodoId, sub) => periodoId + '/' + sub;
-  const getContainer = (pathParts) => {
-    if(pathParts.length===1) return store[pathParts[0]];
-    if(pathParts.length===3) return store.periodoSubs[subKey(pathParts[1], pathParts[2])] || {};
-    return {};
-  };
-  const notifyChange = (pathParts, id) => {
-    const collKey = pathParts.join('/');
-    const docKey = collKey + '/' + id;
-    listeners.forEach(l=>{
-      if(l.kind==='collection' && l.pathKey===collKey) l.cb();
-      if(l.kind==='doc' && l.pathKey===docKey) l.cb();
-    });
-  };
-  const makeSnapshot = (container, filterFn, sortFn) => {
-    let entries = Object.entries(container || {});
-    if(filterFn) entries = entries.filter(([id,d])=>filterFn(d));
-    if(sortFn) entries = entries.sort((a,b)=>sortFn(a[1], b[1]));
-    return {
-      forEach(cb){ entries.forEach(([id,d])=>cb({id, data:()=>({...d})})); },
-      docs: entries.map(([id,d])=>({id, data:()=>({...d}), exists:true})),
-      empty: entries.length===0,
-    };
-  };
-
-  function collectionRef(pathParts, filterFn, sortFn){
-    return {
-      doc(id){ return docRef(pathParts, id || ('id_'+Math.random().toString(36).slice(2,10))); },
-      onSnapshot(cb, errCb){
-        const wrapped = () => cb(makeSnapshot(getContainer(pathParts), filterFn, sortFn));
-        const entry = {kind:'collection', pathKey:pathParts.join('/'), cb:wrapped};
-        listeners.push(entry);
-        wrapped();
-        return () => { const i = listeners.indexOf(entry); if(i>=0) listeners.splice(i,1); };
-      },
-      get(){ return Promise.resolve(makeSnapshot(getContainer(pathParts), filterFn, sortFn)); },
-      where(field, op, value){
-        const nf = (d)=> (filterFn?filterFn(d):true) && (op==='==' ? d[field]===value : true);
-        return collectionRef(pathParts, nf, sortFn);
-      },
-      orderBy(field, dir){
-        const ns = (a,b)=>{ const av=a[field]||0, bv=b[field]||0; return dir==='desc' ? (bv-av) : (av-bv); };
-        return collectionRef(pathParts, filterFn, ns);
-      }
-    };
-  }
-
-  function docRef(pathParts, id){
-    return {
-      id,
-      get(){
-        const bucket = getContainer(pathParts);
-        const d = bucket[id];
-        return Promise.resolve({exists: !!d, data:()=> d ? {...d} : undefined, id});
-      },
-      onSnapshot(cb, errCb){
-        const wrapped = () => {
-          const bucket = getContainer(pathParts);
-          const d = bucket ? bucket[id] : undefined;
-          cb({exists: !!d, data:()=> d ? {...d} : undefined, id});
-        };
-        const entry = {kind:'doc', pathKey:pathParts.join('/')+'/'+id, cb:wrapped};
-        listeners.push(entry);
-        wrapped();
-        return () => { const i = listeners.indexOf(entry); if(i>=0) listeners.splice(i,1); };
-      },
-      set(data, opts){
-        if(pathParts.length===3 && !store.periodoSubs[subKey(pathParts[1], pathParts[2])]) store.periodoSubs[subKey(pathParts[1], pathParts[2])] = {};
-        const bucket = getContainer(pathParts);
-        bucket[id] = (opts && opts.merge) ? {...(bucket[id]||{}), ...data} : {...data};
-        notifyChange(pathParts, id);
-        return Promise.resolve();
-      },
-      update(data){ return this.set(data, {merge:true}); },
-      delete(){
-        const bucket = getContainer(pathParts);
-        delete bucket[id];
-        notifyChange(pathParts, id);
-        return Promise.resolve();
-      },
-      collection(name){ return collectionRef([...pathParts, id, name]); }
-    };
-  }
-
-  const mockDb = {
-    collection(name){ return collectionRef([name]); },
-    batch(){
-      const ops = [];
-      return {
-        set(ref, data){ ops.push(()=>ref.set(data)); },
-        delete(ref){ ops.push(()=>ref.delete()); },
-        commit(){ ops.forEach(op=>op()); return Promise.resolve(); }
-      };
-    }
-  };
-
-  seedDemoData(store);
-  return mockDb;
-}
-
-function createMockAuth(){
-  let currentUser = null;
-  const listeners = [];
-  const notify = () => listeners.forEach(cb=>cb(currentUser));
-  return {
-    onAuthStateChanged(cb){
-      listeners.push(cb); cb(currentUser);
-      return () => { const i=listeners.indexOf(cb); if(i>=0) listeners.splice(i,1); };
-    },
-    signInAnonymously(){
-      currentUser = {uid:'demo-anon-'+Math.random().toString(36).slice(2,8), isAnonymous:true, email:null};
-      notify(); return Promise.resolve({user:currentUser});
-    },
-    signInWithEmailAndPassword(email){
-      currentUser = {uid:'demo-admin', isAnonymous:false, email};
-      notify(); return Promise.resolve({user:currentUser});
-    },
-    createUserWithEmailAndPassword(email){
-      currentUser = {uid:'demo-admin', isAnonymous:false, email};
-      notify(); return Promise.resolve({user:currentUser});
-    },
-    signOut(){ currentUser = null; notify(); return Promise.resolve(); }
-  };
-}
-
-function seedDemoData(store){
-  const now = Date.now();
-  const pid = 'demo_periodo';
-  store.periodos[pid] = {
-    nombre:'2026-1 (demo)', fechaLimite:'2026-09-30', activo:true,
-    entityName:'Coopfuturo (demo)', periodoLabel:'Primer semestre 2026',
-    areas:['Gerencia','Cartera','Riesgo','Servicio al asociado'],
-    componentWeights: defaultComponentWeights(),
-    evaluatorWeights: defaultEvaluatorWeights(),
-    scoreConfig: defaultScoreConfig(),
-    createdAt: now,
-  };
-  const qBucket = {}; store.periodoSubs[pid+'/questionnaires'] = qBucket;
-  defaultQuestionnaireSeeds().forEach((q,i)=>{ const id='demoq_'+i; qBucket[id] = {...q, id}; });
-
-  const cBucket = {}; store.periodoSubs[pid+'/collaborators'] = cBucket;
-  [
-    {id:'demo_c1', nombre:'Laura Gómez', cargo:'Gerente General', area:'Gerencia', categoria:'gerencia', accessCode:'DEMO01'},
-    {id:'demo_c2', nombre:'Carlos Restrepo', cargo:'Líder de Cartera', area:'Cartera', categoria:'lider', accessCode:'DEMO02'},
-    {id:'demo_c3', nombre:'Ana Muñoz', cargo:'Analista de Riesgo', area:'Riesgo', categoria:'liderTransversal', accessCode:'DEMO03'},
-    {id:'demo_c4', nombre:'Julián Ospina', cargo:'Asesor de Servicio', area:'Servicio al asociado', categoria:'operativo', accessCode:'DEMO04'},
-  ].forEach(c=>{ cBucket[c.id]=c; });
-
-  const aBucket = {}; store.periodoSubs[pid+'/assignments'] = aBucket;
-  [
-    {id:'demo_a1', evaluadoId:'demo_c2', role:'jefeInmediato', evaluadorId:'demo_c1', evaluadorLabel:'Laura Gómez', ts:now},
-    {id:'demo_a2', evaluadoId:'demo_c2', role:'par', evaluadorId:'demo_c3', evaluadorLabel:'Ana Muñoz', ts:now},
-    {id:'demo_a3', evaluadoId:'demo_c4', role:'jefeInmediato', evaluadorId:'demo_c2', evaluadorLabel:'Carlos Restrepo', ts:now},
-    {id:'demo_a4', evaluadoId:'demo_c4', role:'companeroOperativo', evaluadorId:'demo_c3', evaluadorLabel:'Ana Muñoz', ts:now},
-  ].forEach(a=>{ aBucket[a.id]=a; });
-
-  const eBucket = {}; store.periodoSubs[pid+'/evaluations'] = eBucket;
-  [
-    {id:'self-demo_c2', assignmentId:'self-demo_c2', collaboratorId:'demo_c2', role:'autoevaluacion', evaluatorId:'demo_c2', evaluatorLabel:'Carlos Restrepo', scores:{habilidadesBlandas:85, habilidadesCore:78, productividad:80, conocimientosBasicos:100}, ts:now},
-    {id:'demo_a1', assignmentId:'demo_a1', collaboratorId:'demo_c2', role:'jefeInmediato', evaluatorId:'demo_c1', evaluatorLabel:'Laura Gómez', scores:{habilidadesBlandas:75, habilidadesCore:70, productividad:82}, ts:now},
-    {id:'demo_a2', assignmentId:'demo_a2', collaboratorId:'demo_c2', role:'par', evaluatorId:'demo_c3', evaluatorLabel:'Ana Muñoz', scores:{habilidadesBlandas:80, productividad:75}, ts:now},
-    {id:'self-demo_c4', assignmentId:'self-demo_c4', collaboratorId:'demo_c4', role:'autoevaluacion', evaluatorId:'demo_c4', evaluatorLabel:'Julián Ospina', scores:{habilidadesBlandas:60, habilidadesCore:55, productividad:58, conocimientosBasicos:60}, ts:now},
-    {id:'demo_a3', assignmentId:'demo_a3', collaboratorId:'demo_c4', role:'jefeInmediato', evaluatorId:'demo_c2', evaluatorLabel:'Carlos Restrepo', scores:{habilidadesBlandas:65, habilidadesCore:60, productividad:63}, ts:now},
-    {id:'demo_a4', assignmentId:'demo_a4', collaboratorId:'demo_c4', role:'companeroOperativo', evaluatorId:'demo_c3', evaluatorLabel:'Ana Muñoz', scores:{habilidadesBlandas:70}, ts:now},
-  ].forEach(e=>{ eBucket[e.id]=e; });
-}
 
 /* =========================================================
    DOMAIN CONSTANTS
@@ -712,40 +551,54 @@ const LegalNotice = ({dark}) => {
 /* =========================================================
    SETUP NOTICE — se muestra si firebaseConfig sigue en placeholder
    ========================================================= */
-const SetupNotice = ({onDemo}) => (
+const AuthShell = ({children}) => (
   <div id="authGate">
-    <div className="gate-card">
-      <div className="login-card">
-        <span className="mark" style={{fontFamily:'var(--font-mono)', fontSize:11, letterSpacing:'.14em', color:'var(--moss)', textTransform:'uppercase'}}>Talento · 270°</span>
-        <h2 style={{marginTop:6}}>Evaluación de desempeño</h2>
-        <div className="gate-setup">
-          Este archivo todavía no está conectado a una base de datos. Reemplaza el objeto{' '}
-          <code>firebaseConfig</code> al inicio del <code>&lt;script&gt;</code> con la configuración de tu propio
-          proyecto de Firebase (ver README.md) y vuelve a publicar.
-        </div>
-        <div className="gate-choice">
-          <button className="btn secondary" onClick={onDemo}>Ver demo sin conectar</button>
-        </div>
-        <p style={{fontSize:11.5, color:'var(--ink-faint)', marginTop:14}}>
-          El modo demo usa datos de ejemplo guardados solo en esta pestaña — no se conecta a ninguna base de
-          datos ni se guarda nada al cerrar. Es para revisar el flujo completo antes de publicar.
+    <div className="auth-visual">
+      <div className="auth-visual-inner">
+        <div className="brand-row"><Logo size={36}/><span className="mark">Talento · 270°</span></div>
+        <h1 className="auth-headline">Evaluación de<br/>desempeño 270°</h1>
+        <p className="auth-tagline">
+          Autoevaluación, jefe inmediato, pares, subordinados y compañeros — reunidos en un solo
+          proceso, con resultados claros por colaborador, por área y consolidados.
         </p>
+      </div>
+      <svg className="auth-rings" viewBox="0 0 400 400" aria-hidden="true">
+        <circle cx="330" cy="330" r="70" fill="none" stroke="#EAF0F2" strokeOpacity="0.10" strokeWidth="18"/>
+        <circle cx="330" cy="330" r="120" fill="none" stroke="#EAF0F2" strokeOpacity="0.08" strokeWidth="14"/>
+        <circle cx="330" cy="330" r="170" fill="none" stroke="#EAF0F2" strokeOpacity="0.06" strokeWidth="10"/>
+        <circle cx="330" cy="330" r="70" fill="none" stroke="#A9C1CE" strokeOpacity="0.55" strokeWidth="18"
+          strokeDasharray="440" strokeDashoffset="140" strokeLinecap="round" transform="rotate(-90 330 330)"/>
+      </svg>
+    </div>
+    <div className="auth-panel">
+      <div className="auth-panel-inner">
+        {children}
+        <div style={{marginTop:26}}><LegalNotice/></div>
       </div>
     </div>
   </div>
+);
+
+const SetupNotice = () => (
+  <AuthShell>
+    <h2 className="auth-panel-title">Falta un paso</h2>
+    <div className="gate-setup">
+      Este sitio todavía no está conectado a una base de datos. Reemplaza el objeto{' '}
+      <code>firebaseConfig</code> al inicio del <code>&lt;script&gt;</code> con la configuración de tu
+      propio proyecto de Firebase (ver README.md) y vuelve a publicar.
+    </div>
+  </AuthShell>
 );
 
 /* =========================================================
    APP ROOT — decide auth state → AuthGate / AdminApp / PortalApp
    ========================================================= */
 const App = () => {
-  const [demoActive, setDemoActive] = useState(false);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const needsSetup = CONFIG_IS_PLACEHOLDER && !demoActive;
 
   useEffect(()=>{
-    if(needsSetup){ setLoading(false); return; }
+    if(CONFIG_IS_PLACEHOLDER){ setLoading(false); return; }
     const unsub = auth.onAuthStateChanged(async (u)=>{
       setUser(u);
       if(u && !u.isAnonymous){
@@ -760,15 +613,9 @@ const App = () => {
       setLoading(false);
     });
     return ()=>unsub();
-  },[needsSetup]);
+  },[]);
 
-  if(needsSetup){
-    return <SetupNotice onDemo={()=>{
-      db = createMockBackend();
-      auth = createMockAuth();
-      setDemoActive(true);
-    }}/>;
-  }
+  if(CONFIG_IS_PLACEHOLDER) return <SetupNotice/>;
   if(loading) return <div className="loading">Cargando…</div>;
   if(!user) return <AuthGate/>;
   if(user.isAnonymous) return <PortalApp/>;
@@ -802,48 +649,39 @@ const AuthGate = () => {
 
   if(mode==='choice'){
     return (
-      <div id="authGate">
-        <div className="gate-card">
-          <div className="login-card">
-            <span className="mark" style={{fontFamily:'var(--font-mono)', fontSize:11, letterSpacing:'.14em', color:'var(--moss)', textTransform:'uppercase'}}>Talento · 270°</span>
-            <h2 style={{marginTop:6}}>Evaluación de desempeño</h2>
-            <p>Selecciona cómo quieres ingresar.</p>
-            <div className="gate-choice">
-              <button className="btn" onClick={()=>setMode('adminform')}>Ingresar como administrador</button>
-              <button className="btn secondary" onClick={enterPortal}>Ingresar como colaborador</button>
-            </div>
-          </div>
+      <AuthShell>
+        <h2 className="auth-panel-title">Ingresar</h2>
+        <p className="auth-panel-sub">Selecciona cómo quieres entrar.</p>
+        <div className="gate-choice">
+          <button className="btn" onClick={()=>setMode('adminform')}>Ingresar como administrador</button>
+          <button className="btn secondary" onClick={enterPortal}>Ingresar como colaborador</button>
         </div>
-      </div>
+      </AuthShell>
     );
   }
 
   return (
-    <div id="authGate">
-      <div className="gate-card">
-        <div className="login-card">
-          <h2>{isLogin ? 'Acceso administrador' : 'Crear cuenta de administrador'}</h2>
-          <p>{isLogin ? 'Ingresa con tu correo y contraseña.' : 'Crea la cuenta inicial de administración de tu cooperativa.'}{CONFIG_IS_PLACEHOLDER ? ' Modo demo: cualquier correo y contraseña funcionan.' : ''}</p>
-          {error && <div className="login-error">⚠️ {error}</div>}
-          <form onSubmit={submitAdmin}>
-            <div className="field" style={{textAlign:'left'}}>
-              <label>Correo</label>
-              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} required/>
-            </div>
-            <div className="field" style={{textAlign:'left'}}>
-              <label>Contraseña</label>
-              <input type="password" value={password} onChange={e=>setPassword(e.target.value)} required/>
-            </div>
-            <button type="submit" className="btn" disabled={busy}>{busy ? 'Un momento…' : (isLogin ? 'Ingresar' : 'Crear cuenta')}</button>
-          </form>
-          <p style={{fontSize:12.5, color:'var(--ink-soft)', marginTop:14}}>
-            {isLogin ? '¿No tienes cuenta? ' : '¿Ya tienes cuenta? '}
-            <button className="toggle-link" onClick={()=>{setIsLogin(!isLogin); setError('');}}>{isLogin ? 'Crear una' : 'Ingresar'}</button>
-          </p>
-          <button className="back-link" style={{marginTop:14, justifyContent:'center', width:'100%'}} onClick={()=>setMode('choice')}>← Volver</button>
+    <AuthShell>
+      <h2 className="auth-panel-title">{isLogin ? 'Acceso administrador' : 'Crear cuenta de administrador'}</h2>
+      <p className="auth-panel-sub">{isLogin ? 'Ingresa con tu correo y contraseña.' : 'Crea la cuenta inicial de administración de tu cooperativa.'}</p>
+      {error && <div className="login-error">⚠️ {error}</div>}
+      <form onSubmit={submitAdmin}>
+        <div className="field">
+          <label>Correo</label>
+          <input type="email" value={email} onChange={e=>setEmail(e.target.value)} required/>
         </div>
-      </div>
-    </div>
+        <div className="field">
+          <label>Contraseña</label>
+          <input type="password" value={password} onChange={e=>setPassword(e.target.value)} required/>
+        </div>
+        <button type="submit" className="btn" style={{width:'100%', justifyContent:'center', padding:12}} disabled={busy}>{busy ? 'Un momento…' : (isLogin ? 'Ingresar' : 'Crear cuenta')}</button>
+      </form>
+      <p style={{fontSize:12.5, color:'var(--ink-soft)', marginTop:14}}>
+        {isLogin ? '¿No tienes cuenta? ' : '¿Ya tienes cuenta? '}
+        <button className="toggle-link" onClick={()=>{setIsLogin(!isLogin); setError('');}}>{isLogin ? 'Crear una' : 'Ingresar'}</button>
+      </p>
+      <button className="back-link" style={{marginTop:10}} onClick={()=>setMode('choice')}>← Volver</button>
+    </AuthShell>
   );
 };
 
@@ -913,7 +751,7 @@ const PortalApp = () => {
     return (
       <div id="portal-shell">
         <div className="portal-top">
-          <div className="brand"><div className="brand-row"><Logo size={28}/><span className="mark">Talento · 270° {CONFIG_IS_PLACEHOLDER && <span className="tag gold" style={{marginLeft:6}}>Demo</span>}</span></div><h1>Portal de colaboradores</h1></div>
+          <div className="brand"><div className="brand-row"><Logo size={28}/><span className="mark">Talento · 270°</span></div><h1>Portal de colaboradores</h1></div>
           <button className="back-link" style={{margin:0}} onClick={exit}>← Salir</button>
         </div>
         <div className="portal-body">
@@ -927,7 +765,7 @@ const PortalApp = () => {
   return (
     <div id="portal-shell">
       <div className="portal-top">
-        <div className="brand"><div className="brand-row"><Logo size={28}/><span className="mark">Talento · 270° {CONFIG_IS_PLACEHOLDER && <span className="tag gold" style={{marginLeft:6}}>Demo</span>}</span></div><h1>{config ? config.entityName || 'Portal de colaboradores' : 'Portal de colaboradores'}</h1></div>
+        <div className="brand"><div className="brand-row"><Logo size={28}/><span className="mark">Talento · 270°</span></div><h1>{config ? config.entityName || 'Portal de colaboradores' : 'Portal de colaboradores'}</h1></div>
         <button className="back-link" style={{margin:0}} onClick={exit}>← Salir</button>
       </div>
       <div className="portal-body">
@@ -943,7 +781,7 @@ const PortalApp = () => {
         {view==='login' && (
           <div className="login-card">
             <h2>Ingresa tu código</h2>
-            <p>{config && config.periodo ? `Periodo: ${config.periodo}. ` : ''}Escribe el código de acceso que te compartió tu área de talento humano.{CONFIG_IS_PLACEHOLDER ? ' Modo demo: prueba con DEMO01, DEMO02, DEMO03 o DEMO04.' : ''}</p>
+            <p>{config && config.periodo ? `Periodo: ${config.periodo}. ` : ''}Escribe el código de acceso que te compartió tu área de talento humano.</p>
             <input type="text" placeholder="XXXXXX" maxLength={8} value={code}
               onChange={e=>setCode(e.target.value)}
               onKeyDown={e=>{ if(e.key==='Enter') tryLogin(); }}/>
@@ -1204,7 +1042,7 @@ const AdminApp = ({user}) => {
     <div className="app">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-row"><Logo size={30}/><span className="mark">Talento · 270° {CONFIG_IS_PLACEHOLDER && <span className="tag gold" style={{marginLeft:6}}>Demo</span>}</span></div>
+          <div className="brand-row"><Logo size={30}/><span className="mark">Talento · 270°</span></div>
           <h1>{periodo ? (periodo.entityName || 'Evaluación de desempeño') : 'Evaluación de desempeño'}</h1>
           <div className="sub">{isSupervisor ? `Supervisor · ${misAreas.join(', ')}` : 'Panel de administración'}</div>
         </div>
