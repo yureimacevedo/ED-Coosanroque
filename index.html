@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Evaluación 270° · Cooperativa</title>
+<title>Evaluación 270° · Coosanroque</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -42,6 +42,8 @@
   .brand .mark{font-family:var(--font-mono); font-size:11px; letter-spacing:.14em; color:var(--accent-soft); text-transform:uppercase;}
   .brand h1{font-family:var(--font-display); font-size:17px; font-weight:600; margin:2px 0 0; letter-spacing:-.01em;}
   .brand .sub{font-size:12px; color:#B7CBD3; margin-top:4px;}
+  .entidad-name{font-family:var(--font-mono); font-size:12.5px; font-weight:600; color:var(--accent); margin-top:5px; letter-spacing:.02em;}
+  .entidad-name.on-dark{color:var(--accent-soft);}
 
   .periodo-select{width:100%; padding:8px 10px; border-radius:var(--radius); border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.06); color:#EAF0F2; font-size:12.5px; font-family:var(--font-body);}
   .periodo-select option{color:#111;}
@@ -283,7 +285,20 @@
 const {useState, useEffect, useMemo} = React;
 
 /* =========================================================
-   FIREBASE INIT — proyecto talento-270
+   ENTIDAD — este sitio (repositorio de GitHub) es exclusivo de
+   UNA entidad/cooperativa. El proyecto de Firebase de abajo es
+   compartido entre todos los sitios de todas las entidades; lo
+   que mantiene los datos de cada una separados es que cada sitio
+   solo lee/escribe dentro de /entidades/{ENTIDAD_ID}/... — nunca
+   toca las demás. Al desplegar para una nueva cooperativa, copia
+   este repositorio completo y solo cambia estas dos líneas (y el
+   <title> de la página); el firebaseConfig de abajo se queda igual.
+   ========================================================= */
+const ENTIDAD_ID = 'coosanroque';
+const ENTIDAD_NOMBRE = 'Coosanroque';
+
+/* =========================================================
+   FIREBASE INIT — proyecto talento-270 (compartido por todas las entidades)
    ========================================================= */
 const firebaseConfig = {
   apiKey: "AIzaSyCWFlON96pIn4fsAnyQkDdwsp_UfPUVesg",
@@ -305,6 +320,12 @@ if(!CONFIG_IS_PLACEHOLDER){
 const FieldValueCompat = CONFIG_IS_PLACEHOLDER
   ? { serverTimestamp: () => Date.now() }
   : firebase.firestore.FieldValue;
+
+// Todas las referencias a "periodos" en el resto de la app pasan por aquí,
+// para que este sitio nunca lea ni escriba fuera del árbol de su propia entidad.
+function entidadPeriodos(){
+  return db.collection('entidades').doc(ENTIDAD_ID).collection('periodos');
+}
 
 /* =========================================================
    DOMAIN CONSTANTS
@@ -557,6 +578,7 @@ const AuthShell = ({children}) => (
       <div className="auth-visual-inner">
         <div className="brand-row"><Logo size={36}/><span className="mark">Talento · 270°</span></div>
         <h1 className="auth-headline">Evaluación de<br/>desempeño 270°</h1>
+        <div className="entidad-name on-dark" style={{fontSize:14, marginBottom:2}}>{ENTIDAD_NOMBRE}</div>
         <p className="auth-tagline">
           Autoevaluación, jefe inmediato, pares, subordinados y compañeros — reunidos en un solo
           proceso, con resultados claros por colaborador, por área y consolidados.
@@ -627,7 +649,6 @@ const App = () => {
    ========================================================= */
 const AuthGate = () => {
   const [mode, setMode] = useState('choice'); // choice | adminform
-  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -641,8 +662,7 @@ const AuthGate = () => {
   const submitAdmin = async (e) => {
     e.preventDefault(); setError(''); setBusy(true);
     try{
-      if(isLogin) await auth.signInWithEmailAndPassword(email, password);
-      else await auth.createUserWithEmailAndPassword(email, password);
+      await auth.signInWithEmailAndPassword(email, password);
     }catch(err){ setError(err.message); }
     finally{ setBusy(false); }
   };
@@ -662,8 +682,8 @@ const AuthGate = () => {
 
   return (
     <AuthShell>
-      <h2 className="auth-panel-title">{isLogin ? 'Acceso administrador' : 'Crear cuenta de administrador'}</h2>
-      <p className="auth-panel-sub">{isLogin ? 'Ingresa con tu correo y contraseña.' : 'Crea la cuenta inicial de administración de tu cooperativa.'}</p>
+      <h2 className="auth-panel-title">Acceso administrador</h2>
+      <p className="auth-panel-sub">Ingresa con el correo y la contraseña creados en Firebase Authentication.</p>
       {error && <div className="login-error">⚠️ {error}</div>}
       <form onSubmit={submitAdmin}>
         <div className="field">
@@ -674,13 +694,9 @@ const AuthGate = () => {
           <label>Contraseña</label>
           <input type="password" value={password} onChange={e=>setPassword(e.target.value)} required/>
         </div>
-        <button type="submit" className="btn" style={{width:'100%', justifyContent:'center', padding:12}} disabled={busy}>{busy ? 'Un momento…' : (isLogin ? 'Ingresar' : 'Crear cuenta')}</button>
+        <button type="submit" className="btn" style={{width:'100%', justifyContent:'center', padding:12}} disabled={busy}>{busy ? 'Un momento…' : 'Ingresar'}</button>
       </form>
-      <p style={{fontSize:12.5, color:'var(--ink-soft)', marginTop:14}}>
-        {isLogin ? '¿No tienes cuenta? ' : '¿Ya tienes cuenta? '}
-        <button className="toggle-link" onClick={()=>{setIsLogin(!isLogin); setError('');}}>{isLogin ? 'Crear una' : 'Ingresar'}</button>
-      </p>
-      <button className="back-link" style={{marginTop:10}} onClick={()=>setMode('choice')}>← Volver</button>
+      <button className="back-link" style={{marginTop:16}} onClick={()=>setMode('choice')}>← Volver</button>
     </AuthShell>
   );
 };
@@ -703,7 +719,7 @@ const PortalApp = () => {
   const [loginError, setLoginError] = useState(false);
 
   useEffect(()=>{
-    const unsub = db.collection('periodos').where('activo','==', true).onSnapshot(snap=>{
+    const unsub = entidadPeriodos().where('activo','==', true).onSnapshot(snap=>{
       const arr = []; snap.forEach(d=>arr.push({id:d.id, ...d.data()}));
       setPeriodos(arr);
       setPeriodoId(prev => prev && arr.some(p=>p.id===prev) ? prev : (arr[0]?.id || null));
@@ -713,7 +729,7 @@ const PortalApp = () => {
 
   useEffect(()=>{
     if(!periodoId){ setCollaborators([]); setAssignments([]); setEvaluations([]); setQuestionnaires([]); setConfig(null); return; }
-    const ref = db.collection('periodos').doc(periodoId);
+    const ref = entidadPeriodos().doc(periodoId);
     const u0 = ref.onSnapshot(d=>setConfig(d.exists ? {id:d.id, ...d.data()} : null));
     const u1 = ref.collection('collaborators').onSnapshot(s=>{const a=[];s.forEach(d=>a.push({id:d.id,...d.data()}));setCollaborators(a);});
     const u2 = ref.collection('assignments').onSnapshot(s=>{const a=[];s.forEach(d=>a.push({id:d.id,...d.data()}));setAssignments(a);});
@@ -751,7 +767,7 @@ const PortalApp = () => {
     return (
       <div id="portal-shell">
         <div className="portal-top">
-          <div className="brand"><div className="brand-row"><Logo size={28}/><span className="mark">Talento · 270°</span></div><h1>Portal de colaboradores</h1></div>
+          <div className="brand"><div className="brand-row"><Logo size={28}/><span className="mark">Talento · 270°</span></div><h1>Portal de colaboradores</h1><div className="entidad-name">{ENTIDAD_NOMBRE}</div></div>
           <button className="back-link" style={{margin:0}} onClick={exit}>← Salir</button>
         </div>
         <div className="portal-body">
@@ -765,7 +781,7 @@ const PortalApp = () => {
   return (
     <div id="portal-shell">
       <div className="portal-top">
-        <div className="brand"><div className="brand-row"><Logo size={28}/><span className="mark">Talento · 270°</span></div><h1>{config ? config.entityName || 'Portal de colaboradores' : 'Portal de colaboradores'}</h1></div>
+        <div className="brand"><div className="brand-row"><Logo size={28}/><span className="mark">Talento · 270°</span></div><h1>Portal de colaboradores</h1><div className="entidad-name">{ENTIDAD_NOMBRE}</div></div>
         <button className="back-link" style={{margin:0}} onClick={exit}>← Salir</button>
       </div>
       <div className="portal-body">
@@ -880,7 +896,7 @@ const PortalForm = ({task, portalUser, config, collaborators, questionnaires, ev
     if(incomplete){ showToast('Responde todas las preguntas antes de enviar'); return; }
     setSaving(true);
     try{
-      const ref = db.collection('periodos').doc(periodoId).collection('evaluations').doc(task.assignmentId);
+      const ref = entidadPeriodos().doc(periodoId).collection('evaluations').doc(task.assignmentId);
       await ref.set({
         id: task.assignmentId, assignmentId: task.assignmentId, collaboratorId: task.evaluadoId, role: task.role,
         evaluatorId: portalUser.id, evaluatorLabel: portalUser.nombre, scores, answers,
@@ -988,7 +1004,7 @@ const AdminApp = ({user}) => {
   const misAreas = misupervision ? (misupervision.areas || []) : [];
 
   useEffect(()=>{
-    const unsub = db.collection('periodos').orderBy('createdAt','desc').onSnapshot(snap=>{
+    const unsub = entidadPeriodos().orderBy('createdAt','desc').onSnapshot(snap=>{
       const arr = []; snap.forEach(d=>arr.push({id:d.id, ...d.data()}));
       setPeriodos(arr);
       setPeriodoId(prev => prev && arr.some(p=>p.id===prev) ? prev : (arr[0] ? arr[0].id : null));
@@ -999,7 +1015,7 @@ const AdminApp = ({user}) => {
 
   useEffect(()=>{
     if(!periodoId){ setQuestionnaires([]); setCollaborators([]); setAssignments([]); setEvaluations([]); setSupervisores([]); return; }
-    const ref = db.collection('periodos').doc(periodoId);
+    const ref = entidadPeriodos().doc(periodoId);
     const u1 = ref.collection('questionnaires').onSnapshot(s=>{const a=[];s.forEach(d=>a.push({id:d.id,...d.data()}));setQuestionnaires(a);});
     const u2 = ref.collection('collaborators').onSnapshot(s=>{const a=[];s.forEach(d=>a.push({id:d.id,...d.data()}));setCollaborators(a);});
     const u3 = ref.collection('assignments').onSnapshot(s=>{const a=[];s.forEach(d=>a.push({id:d.id,...d.data()}));setAssignments(a);});
@@ -1009,8 +1025,8 @@ const AdminApp = ({user}) => {
   },[periodoId]);
 
   // ---- helpers de escritura Firestore, ligados al periodo activo ----
-  const col = (name) => db.collection('periodos').doc(periodoId).collection(name);
-  const savePeriodo = async (data) => { await db.collection('periodos').doc(periodoId).set(data, {merge:true}); };
+  const col = (name) => entidadPeriodos().doc(periodoId).collection(name);
+  const savePeriodo = async (data) => { await entidadPeriodos().doc(periodoId).set(data, {merge:true}); };
   const saveQuestionnaire = async (q) => { await col('questionnaires').doc(q.id).set(q); };
   const deleteQuestionnaire = async (id) => { await col('questionnaires').doc(id).delete(); };
   const saveCollaborator = async (c) => { await col('collaborators').doc(c.id).set(c); };
@@ -1043,7 +1059,8 @@ const AdminApp = ({user}) => {
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-row"><Logo size={30}/><span className="mark">Talento · 270°</span></div>
-          <h1>{periodo ? (periodo.entityName || 'Evaluación de desempeño') : 'Evaluación de desempeño'}</h1>
+          <h1>Evaluación de desempeño</h1>
+          <div className="entidad-name on-dark">{ENTIDAD_NOMBRE}</div>
           <div className="sub">{isSupervisor ? `Supervisor · ${misAreas.join(', ')}` : 'Panel de administración'}</div>
         </div>
 
@@ -1144,10 +1161,10 @@ const VistaPeriodos = ({periodos, periodoId, onSelect}) => {
     if(!nombre.trim()){ showToast('Ponle un nombre al periodo, ej. 2026-1'); return; }
     setBusy(true);
     try{
-      const ref = db.collection('periodos').doc();
+      const ref = entidadPeriodos().doc();
       const data = {
         nombre: nombre.trim(), fechaLimite, activo,
-        entityName: 'Coopfuturo', periodoLabel: nombre.trim(),
+        periodoLabel: nombre.trim(),
         componentWeights: defaultComponentWeights(),
         evaluatorWeights: defaultEvaluatorWeights(),
         scoreConfig: scoreNuevo,
@@ -1167,15 +1184,15 @@ const VistaPeriodos = ({periodos, periodoId, onSelect}) => {
     finally{ setBusy(false); }
   };
 
-  const toggleActivo = async (p) => { await db.collection('periodos').doc(p.id).update({activo: !p.activo}); };
+  const toggleActivo = async (p) => { await entidadPeriodos().doc(p.id).update({activo: !p.activo}); };
   const eliminar = async (p) => {
     if(!window.confirm(`¿Eliminar el periodo "${p.nombre}"? Esto no borra las subcolecciones automáticamente — hazlo con cuidado.`)) return;
-    await db.collection('periodos').doc(p.id).delete();
+    await entidadPeriodos().doc(p.id).delete();
   };
 
   const startEditScore = (p) => { setEditingScoreId(p.id); setScoreDraft(JSON.parse(JSON.stringify(p.scoreConfig || defaultScoreConfig()))); };
   const saveScore = async (p) => {
-    await db.collection('periodos').doc(p.id).update({scoreConfig: scoreDraft});
+    await entidadPeriodos().doc(p.id).update({scoreConfig: scoreDraft});
     setEditingScoreId(null);
     showToast('Umbrales de score actualizados');
   };
@@ -1440,14 +1457,12 @@ const VistaUsuarios = ({usuarios, supervisores, areas, currentUid, onSaveSupervi
   );
 };
 const VistaParametrizacion = ({periodo, onSave}) => {
-  const [entityName, setEntityName] = useState(periodo.entityName || '');
   const [periodoLabel, setPeriodoLabel] = useState(periodo.periodoLabel || periodo.nombre || '');
   const [fechaLimite, setFechaLimite] = useState(periodo.fechaLimite || '');
   const [componentWeights, setComponentWeights] = useState(JSON.parse(JSON.stringify(periodo.componentWeights || defaultComponentWeights())));
   const [evaluatorWeights, setEvaluatorWeights] = useState(JSON.parse(JSON.stringify(periodo.evaluatorWeights || defaultEvaluatorWeights())));
 
   useEffect(()=>{
-    setEntityName(periodo.entityName || '');
     setPeriodoLabel(periodo.periodoLabel || periodo.nombre || '');
     setFechaLimite(periodo.fechaLimite || '');
     setComponentWeights(JSON.parse(JSON.stringify(periodo.componentWeights || defaultComponentWeights())));
@@ -1473,7 +1488,7 @@ const VistaParametrizacion = ({periodo, onSave}) => {
   };
 
   const save = async () => {
-    await onSave({entityName, periodoLabel, periodo: periodoLabel, fechaLimite, componentWeights, evaluatorWeights});
+    await onSave({periodoLabel, periodo: periodoLabel, fechaLimite, componentWeights, evaluatorWeights});
     showToast('Configuración guardada');
   };
   const reset = () => {
@@ -1487,16 +1502,16 @@ const VistaParametrizacion = ({periodo, onSave}) => {
       <div className="view-head">
         <div>
           <span className="eyebrow">Parametrización</span>
-          <h2>Configuración de la entidad</h2>
-          <p className="desc">Define el nombre de la entidad y ajusta los puntajes según tu propia política de evaluación para este periodo. Cada fila debe sumar 100%.</p>
+          <h2>Configuración de {ENTIDAD_NOMBRE}</h2>
+          <p className="desc">Ajusta los puntajes según tu propia política de evaluación para este periodo. Cada fila debe sumar 100%.</p>
         </div>
       </div>
 
       <div className="card">
-        <h3>Entidad y periodo</h3>
-        <div className="field-row">
-          <div className="field"><label>Nombre de la entidad</label><input type="text" value={entityName} onChange={e=>setEntityName(e.target.value)} placeholder="Ej. Coopfuturo"/></div>
-          <div className="field"><label>Etiqueta del periodo</label><input type="text" value={periodoLabel} onChange={e=>setPeriodoLabel(e.target.value)} placeholder="Ej. Segundo semestre 2026"/></div>
+        <h3>Periodo</h3>
+        <div className="field" style={{maxWidth:320}}>
+          <label>Etiqueta del periodo</label>
+          <input type="text" value={periodoLabel} onChange={e=>setPeriodoLabel(e.target.value)} placeholder="Ej. Segundo semestre 2026"/>
         </div>
         <div className="field" style={{maxWidth:260}}>
           <label>Fecha límite para responder</label>
@@ -2079,7 +2094,7 @@ const VistaResultados = ({periodo, collaborators, evaluations}) => {
       new TableCell({children:[new Paragraph(semaforoLabel(a.estado))]}),
     ]}));
     const doc = new Document({sections:[{children:[
-      new Paragraph({text:`Resultados de evaluación — ${periodo.entityName||''}`, heading:HeadingLevel.HEADING_1}),
+      new Paragraph({text:`Resultados de evaluación — ${ENTIDAD_NOMBRE}`, heading:HeadingLevel.HEADING_1}),
       new Paragraph({text:`Periodo: ${periodo.periodoLabel||periodo.nombre}`}),
       new Paragraph({text:''}),
       new Paragraph({text:'Consolidado por área', heading:HeadingLevel.HEADING_2}),
