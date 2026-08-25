@@ -251,17 +251,18 @@
     display:flex; align-items:center; padding:56px 60px;
   }
   @media (max-width:860px){ .auth-visual{padding:36px 28px 44px;} }
-  .auth-visual-inner{position:relative; z-index:2; max-width:420px;}
-  .auth-headline{font-family:var(--font-display); font-size:34px; font-weight:600; line-height:1.15; margin:26px 0 16px; letter-spacing:-.01em;}
-  @media (max-width:860px){ .auth-headline{font-size:26px; margin:18px 0 10px;} }
-  .auth-tagline{font-size:14px; color:#B7CBD3; line-height:1.65; max-width:380px;}
+  .auth-visual-inner{position:relative; z-index:2; max-width:440px;}
+  .auth-mark{font-family:var(--font-mono); font-size:14px; font-weight:600; letter-spacing:.16em; color:var(--accent-soft); text-transform:uppercase;}
+  .auth-headline{font-family:var(--font-display); font-size:44px; font-weight:600; line-height:1.1; margin:22px 0 18px; letter-spacing:-.015em;}
+  @media (max-width:860px){ .auth-headline{font-size:30px; margin:16px 0 12px;} }
+  .auth-tagline{font-size:16px; color:#FFFFFF; line-height:1.6; max-width:400px;}
   .auth-rings{position:absolute; right:-60px; bottom:-60px; width:420px; height:420px; z-index:1; pointer-events:none;}
   @media (max-width:860px){ .auth-rings{display:none;} }
 
   .auth-panel{display:flex; align-items:center; justify-content:center; padding:40px 28px; background:var(--bg);}
   .auth-panel-inner{width:100%; max-width:380px;}
-  .auth-panel-title{font-family:var(--font-display); font-size:22px; font-weight:600; margin:0 0 6px;}
-  .auth-panel-sub{color:var(--ink-soft); font-size:13px; margin:0 0 22px;}
+  .auth-panel-title{font-family:var(--font-display); font-size:26px; font-weight:600; margin:0 0 8px;}
+  .auth-panel-sub{color:var(--ink-soft); font-size:14.5px; margin:0 0 24px;}
 
   .gate-choice{display:flex; flex-direction:column; gap:10px; margin-top:6px;}
   .gate-choice .btn{width:100%; justify-content:center; padding:13px;}
@@ -546,18 +547,20 @@ const LegalNotice = ({dark}) => {
   const [expanded, setExpanded] = useState(false);
   const year = new Date().getFullYear();
   const lineColor = dark ? '#7C9AA6' : 'var(--ink-faint)';
+  const nameColor = dark ? '#EAF0F2' : 'var(--ink)';
   const linkColor = dark ? '#B7CBD3' : 'var(--accent)';
   return (
     <div className="legal-notice">
       <div className="copyright-line" style={{color:lineColor}}>
-        © {year} {LEGAL_HOLDER}. Todos los derechos reservados.{' '}
+        © {year} <strong style={{color:nameColor, fontWeight:700}}>{LEGAL_HOLDER}</strong>. Todos los derechos reservados.{' '}
         <button className="toggle-link" style={{fontSize:10.5, color:linkColor}} onClick={()=>setExpanded(!expanded)}>
           {expanded ? 'Ocultar aviso legal' : 'Ver aviso legal'}
         </button>
       </div>
       {expanded && (
         <p style={{fontSize:10.5, color:lineColor, marginTop:6, lineHeight:1.6, maxWidth:520}}>
-          Este software, su código fuente, su diseño y su documentación son obra original de {LEGAL_HOLDER} y
+          Este software, su código fuente, su diseño y su documentación son obra original de{' '}
+          <strong style={{color:nameColor, fontWeight:700}}>{LEGAL_HOLDER}</strong> y
           están protegidos por la Ley 23 de 1982 y la Decisión Andina 351 de 1993 sobre derecho de autor, así
           como por los tratados internacionales aplicables. Queda prohibida su reproducción, distribución,
           comunicación pública, transformación o cualquier otro uso, total o parcial, sin la autorización
@@ -576,12 +579,12 @@ const AuthShell = ({children}) => (
   <div id="authGate">
     <div className="auth-visual">
       <div className="auth-visual-inner">
-        <div className="brand-row"><Logo size={36}/><span className="mark">Talento · 270°</span></div>
+        <div className="brand-row"><Logo size={40}/><span className="auth-mark">Talento · 270°</span></div>
         <h1 className="auth-headline">Evaluación de<br/>desempeño 270°</h1>
-        <div className="entidad-name on-dark" style={{fontSize:14, marginBottom:2}}>{ENTIDAD_NOMBRE}</div>
+        <div className="entidad-name on-dark" style={{fontSize:16, marginBottom:18}}>{ENTIDAD_NOMBRE}</div>
         <p className="auth-tagline">
-          Autoevaluación, jefe inmediato, pares, subordinados y compañeros — reunidos en un solo
-          proceso, con resultados claros por colaborador, por área y consolidados.
+          El desempeño se ve completo cuando se mira desde todos los ángulos que importan:
+          el tuyo, el de tu equipo, el de quienes te acompañan cada día.
         </p>
       </div>
       <svg className="auth-rings" viewBox="0 0 400 400" aria-hidden="true">
@@ -673,8 +676,8 @@ const AuthGate = () => {
         <h2 className="auth-panel-title">Ingresar</h2>
         <p className="auth-panel-sub">Selecciona cómo quieres entrar.</p>
         <div className="gate-choice">
-          <button className="btn" onClick={()=>setMode('adminform')}>Ingresar como administrador</button>
-          <button className="btn secondary" onClick={enterPortal}>Ingresar como colaborador</button>
+          <button className="btn" onClick={enterPortal}>Ingresar como colaborador</button>
+          <button className="btn secondary" onClick={()=>setMode('adminform')}>Ingresar como administrador</button>
         </div>
       </AuthShell>
     );
