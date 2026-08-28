@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Evaluación 270° · Coosanroque</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232A4256'/%3E%3Ccircle cx='32' cy='32' r='19' fill='none' stroke='%23A9C1CE' stroke-width='6'/%3E%3Ccircle cx='32' cy='32' r='19' fill='none' stroke='%23EAF0F2' stroke-width='6' stroke-dasharray='75 119' stroke-linecap='round' transform='rotate(-90 32 32)'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -270,12 +271,27 @@
   .gate-setup code{background:#fff; padding:1px 5px; border-radius:2px; font-family:var(--font-mono);}
   .toggle-link{background:none; border:none; color:var(--accent); font-weight:600; cursor:pointer; text-decoration:underline; font-size:12.5px; padding:0;}
 
+  .print-report{display:none;}
+  .print-page{padding:8px 0;}
+  .print-header{margin-bottom:22px; border-bottom:2px solid #232620; padding-bottom:10px;}
+  .print-header h1{font-family:var(--font-display); font-size:19px; margin:0 0 4px; color:#232620;}
+  .print-header p{font-size:11px; color:#5C6058; margin:0;}
+  .print-section-title{font-family:var(--font-display); font-size:13.5px; font-weight:600; margin:18px 0 8px; color:#232620;}
+  .print-table{width:100%; border-collapse:collapse; margin-bottom:6px;}
+  .print-table th, .print-table td{border:1px solid #ccc; padding:6px 9px; font-size:11px; text-align:left; color:#232620;}
+  .print-table th{background:#f2f2f0; font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:.04em;}
+  .print-collab-header{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;}
+  .print-score-badge{font-family:var(--font-mono); font-size:26px; font-weight:700; color:#232620;}
+
   @media print{
-    .sidebar, nav.tabs, .btn, .view-head-actions, .save-bar, .ai-box{display:none !important;}
+    .sidebar, nav.tabs, .btn, .view-head-actions, .save-bar, .ai-box, .no-print{display:none !important;}
     main{padding:0; max-width:100%;}
     .app{display:block;}
     body{background:#fff;}
     .card{box-shadow:none; border:1px solid #ccc; page-break-inside:avoid;}
+    .print-report{display:block !important;}
+    .print-page{page-break-after:always;}
+    .print-page:last-child{page-break-after:auto;}
   }
 </style>
 </head>
@@ -2083,38 +2099,78 @@ const VistaResultados = ({periodo, collaborators, evaluations}) => {
 
   const exportarWord = async () => {
     const {Document, Packer, Paragraph, Table, TableRow, TableCell, HeadingLevel, WidthType} = docx;
-    const headerRow = new TableRow({children:['Colaborador','Categoría','Score','Estado'].map(h=>new TableCell({children:[new Paragraph({text:h, bold:true})]}))});
-    const dataRows = rows.map(({p,fs})=>new TableRow({children:[
-      new TableCell({children:[new Paragraph(p.nombre)]}),
-      new TableCell({children:[new Paragraph(CATEGORIES.find(c=>c.key===p.categoria)?.label||'')]}),
-      new TableCell({children:[new Paragraph(fs.score!==null?fs.score.toFixed(1):'—')]}),
-      new TableCell({children:[new Paragraph(fs.score!==null?semaforoLabel(classifySemaforo(fs.score,scoreConfig)):'Sin datos')]}),
+    const fechaGenerado = new Date().toLocaleDateString('es-CO', {year:'numeric', month:'long', day:'numeric'});
+    const children = [];
+
+    // ---- Consolidado general ----
+    children.push(new Paragraph({text:`${ENTIDAD_NOMBRE} — Informe de evaluación 270°`, heading:HeadingLevel.HEADING_1}));
+    children.push(new Paragraph({text:`Periodo: ${periodo.periodoLabel || periodo.nombre} · Generado el ${fechaGenerado}`}));
+    children.push(new Paragraph({text:''}));
+    children.push(new Paragraph({text:'Consolidado general', heading:HeadingLevel.HEADING_2}));
+    children.push(new Table({width:{size:100,type:WidthType.PERCENTAGE}, rows:[
+      new TableRow({children:[new TableCell({children:[new Paragraph('Colaboradores registrados')]}), new TableCell({children:[new Paragraph(String(collaborators.length))]})]}),
+      new TableRow({children:[new TableCell({children:[new Paragraph('Con evaluación en curso')]}), new TableCell({children:[new Paragraph(String(evaluated.length))]})]}),
+      new TableRow({children:[new TableCell({children:[new Paragraph('Score promedio general')]}), new TableCell({children:[new Paragraph(avg!==null?avg.toFixed(1):'—')]})]}),
+      new TableRow({children:[new TableCell({children:[new Paragraph('En zona crítica')]}), new TableCell({children:[new Paragraph(String(criticos))]})]}),
     ]}));
-    const areaHeaderRow = new TableRow({children:['Área','Score promedio','Estado'].map(h=>new TableCell({children:[new Paragraph({text:h, bold:true})]}))});
+    children.push(new Paragraph({text:''}));
+
+    // ---- Por área ----
+    children.push(new Paragraph({text:'Por área', heading:HeadingLevel.HEADING_2}));
+    const areaHeaderRow = new TableRow({children:['Área','Colaboradores','Evaluados','Score promedio','Estado'].map(h=>new TableCell({children:[new Paragraph({text:h, bold:true})]}))});
     const areaDataRows = areaRows.map(a=>new TableRow({children:[
       new TableCell({children:[new Paragraph(a.area)]}),
+      new TableCell({children:[new Paragraph(String(a.total))]}),
+      new TableCell({children:[new Paragraph(String(a.evaluados))]}),
       new TableCell({children:[new Paragraph(a.avg!==null?a.avg.toFixed(1):'—')]}),
-      new TableCell({children:[new Paragraph(semaforoLabel(a.estado))]}),
+      new TableCell({children:[new Paragraph(a.estado ? semaforoLabel(a.estado) : 'Sin datos')]}),
     ]}));
-    const doc = new Document({sections:[{children:[
-      new Paragraph({text:`Resultados de evaluación — ${ENTIDAD_NOMBRE}`, heading:HeadingLevel.HEADING_1}),
-      new Paragraph({text:`Periodo: ${periodo.periodoLabel||periodo.nombre}`}),
-      new Paragraph({text:''}),
-      new Paragraph({text:'Consolidado por área', heading:HeadingLevel.HEADING_2}),
-      new Table({width:{size:100,type:WidthType.PERCENTAGE}, rows:[areaHeaderRow, ...areaDataRows]}),
-      new Paragraph({text:''}),
-      new Paragraph({text:'Por colaborador', heading:HeadingLevel.HEADING_2}),
-      new Table({width:{size:100,type:WidthType.PERCENTAGE}, rows:[headerRow, ...dataRows]}),
-    ]}]});
+    children.push(new Table({width:{size:100,type:WidthType.PERCENTAGE}, rows:[areaHeaderRow, ...areaDataRows]}));
+
+    // ---- Una sección por colaborador, cada una en página nueva ----
+    rows.forEach(({p,fs})=>{
+      const catLabel = CATEGORIES.find(c=>c.key===p.categoria)?.label || p.categoria;
+      const estado = fs.score!==null ? classifySemaforo(fs.score, scoreConfig) : null;
+      const breakdown = componentBreakdownFor(p, periodo.evaluatorWeights, periodo.componentWeights, evaluations);
+      const roleWeights = periodo.evaluatorWeights[p.categoria] || {};
+
+      children.push(new Paragraph({text:p.nombre, heading:HeadingLevel.HEADING_1, pageBreakBefore:true}));
+      children.push(new Paragraph({text:`${p.cargo || 'Sin cargo'} ${p.area ? '· '+p.area : ''} · ${catLabel}`}));
+      children.push(new Paragraph({text:`Score final: ${fs.score!==null?fs.score.toFixed(1):'—'} — ${estado ? semaforoLabel(estado) : 'Sin datos'}`, bold:true}));
+      children.push(new Paragraph({text:''}));
+
+      children.push(new Paragraph({text:'Por evaluador', heading:HeadingLevel.HEADING_2}));
+      const evalHeaderRow = new TableRow({children:['Evaluador','Peso','Puntaje'].map(h=>new TableCell({children:[new Paragraph({text:h, bold:true})]}))});
+      const evalDataRows = Object.entries(roleWeights).map(([roleKey,w])=>{
+        const val = fs.roleScores[roleKey];
+        return new TableRow({children:[
+          new TableCell({children:[new Paragraph(ROLES.find(r=>r.key===roleKey)?.label || roleKey)]}),
+          new TableCell({children:[new Paragraph(w+'%')]}),
+          new TableCell({children:[new Paragraph(val!==null && val!==undefined ? val.toFixed(1) : 'Sin datos')]}),
+        ]});
+      });
+      children.push(new Table({width:{size:100,type:WidthType.PERCENTAGE}, rows:[evalHeaderRow, ...evalDataRows]}));
+      children.push(new Paragraph({text:''}));
+
+      children.push(new Paragraph({text:'Por componente', heading:HeadingLevel.HEADING_2}));
+      const compHeaderRow = new TableRow({children:['Componente','Puntaje'].map(h=>new TableCell({children:[new Paragraph({text:h, bold:true})]}))});
+      const compDataRows = COMPONENTS.map(c=>new TableRow({children:[
+        new TableCell({children:[new Paragraph(c.label)]}),
+        new TableCell({children:[new Paragraph(breakdown[c.key]!==null ? breakdown[c.key].toFixed(1) : 'Sin datos')]}),
+      ]}));
+      children.push(new Table({width:{size:100,type:WidthType.PERCENTAGE}, rows:[compHeaderRow, ...compDataRows]}));
+    });
+
+    const doc = new Document({sections:[{children}]});
     const blob = await Packer.toBlob(doc);
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href=url; a.download=`resultados_${periodo.nombre}.docx`; a.click();
+    const a = document.createElement('a'); a.href=url; a.download=`informe_${periodo.nombre}.docx`; a.click();
     URL.revokeObjectURL(url);
   };
 
   return (
     <section>
-      <div className="view-head">
+      <div className="view-head no-print">
         <div>
           <span className="eyebrow">Consolidado</span>
           <h2>Resultados</h2>
@@ -2131,7 +2187,7 @@ const VistaResultados = ({periodo, collaborators, evaluations}) => {
         </div>
       </div>
 
-      <div className="card">
+      <div className="card no-print">
         <h3>Consolidado general</h3>
         <div style={{display:'flex', gap:28, alignItems:'center', flexWrap:'wrap'}}>
           <Gauge value={avg} big/>
@@ -2144,7 +2200,7 @@ const VistaResultados = ({periodo, collaborators, evaluations}) => {
         </div>
       </div>
 
-      <div className="card" style={{marginTop:16}}>
+      <div className="card no-print" style={{marginTop:16}}>
         <h3>Por área</h3>
         {areaRows.length===0 ? <div className="empty">Aún no hay colaboradores para agrupar por área.</div> : (
           <table>
@@ -2164,7 +2220,7 @@ const VistaResultados = ({periodo, collaborators, evaluations}) => {
         )}
       </div>
 
-      <div className="card" style={{marginTop:16}}>
+      <div className="card no-print" style={{marginTop:16}}>
         <h3>Por colaborador</h3>
         {collaborators.length===0 ? <div className="empty">Aún no hay colaboradores. Agrégalos en la sección Colaboradores.</div> : rows.map(({p,fs})=>{
           const catLabel = CATEGORIES.find(c=>c.key===p.categoria)?.label || p.categoria;
@@ -2188,6 +2244,100 @@ const VistaResultados = ({periodo, collaborators, evaluations}) => {
                 <div style={{textAlign:'center', color:'var(--ink-faint)'}}>{open?'⌃':'›'}</div>
               </div>
               {open && <ResultDetail p={p} fs={fs} periodo={periodo} evaluations={evaluations}/>}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ===== INFORME IMPRIMIBLE — oculto en pantalla, visible solo al imprimir ===== */}
+      <div className="print-report">
+        <div className="print-page">
+          <div className="print-header">
+            <h1>{ENTIDAD_NOMBRE} — Informe de evaluación 270°</h1>
+            <p>Periodo: {periodo.periodoLabel || periodo.nombre} · Generado el {new Date().toLocaleDateString('es-CO', {year:'numeric', month:'long', day:'numeric'})}</p>
+          </div>
+
+          <div className="print-section-title">Consolidado general</div>
+          <table className="print-table">
+            <tbody>
+              <tr><td>Colaboradores registrados</td><td><strong>{collaborators.length}</strong></td></tr>
+              <tr><td>Con evaluación en curso</td><td><strong>{evaluated.length}</strong></td></tr>
+              <tr><td>Score promedio general</td><td><strong>{avg!==null?avg.toFixed(1):'—'}</strong></td></tr>
+              <tr><td>En zona crítica</td><td><strong>{criticos}</strong></td></tr>
+            </tbody>
+          </table>
+
+          <div className="print-section-title">Por área</div>
+          {areaRows.length===0 ? <p>Sin colaboradores para agrupar por área.</p> : (
+            <table className="print-table">
+              <thead><tr><th>Área</th><th>Colaboradores</th><th>Evaluados</th><th>Score promedio</th><th>Estado</th></tr></thead>
+              <tbody>
+                {areaRows.map(a=>(
+                  <tr key={a.area}>
+                    <td>{a.area}</td>
+                    <td>{a.total}</td>
+                    <td>{a.evaluados}</td>
+                    <td>{a.avg!==null?a.avg.toFixed(1):'—'}</td>
+                    <td>{a.estado ? semaforoLabel(a.estado) : 'Sin datos'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {rows.map(({p,fs})=>{
+          const catLabel = CATEGORIES.find(c=>c.key===p.categoria)?.label || p.categoria;
+          const estado = fs.score!==null ? classifySemaforo(fs.score, scoreConfig) : null;
+          const breakdown = componentBreakdownFor(p, periodo.evaluatorWeights, periodo.componentWeights, evaluations);
+          const roleWeights = periodo.evaluatorWeights[p.categoria] || {};
+          return (
+            <div className="print-page" key={p.id}>
+              <div className="print-header">
+                <h1>{ENTIDAD_NOMBRE} — Informe individual</h1>
+                <p>Periodo: {periodo.periodoLabel || periodo.nombre} · Generado el {new Date().toLocaleDateString('es-CO', {year:'numeric', month:'long', day:'numeric'})}</p>
+              </div>
+
+              <div className="print-collab-header">
+                <div>
+                  <h1 style={{fontSize:18, margin:'0 0 3px'}}>{p.nombre}</h1>
+                  <div style={{fontSize:11.5, color:'#5C6058'}}>{p.cargo || 'Sin cargo'} {p.area?'· '+p.area:''} · {catLabel}</div>
+                </div>
+                <div style={{textAlign:'right'}}>
+                  <div className="print-score-badge">{fs.score!==null?fs.score.toFixed(1):'—'}</div>
+                  <div style={{fontSize:11}}>{estado ? semaforoLabel(estado) : 'Sin datos'}</div>
+                </div>
+              </div>
+
+              <div className="print-section-title">Por evaluador</div>
+              <table className="print-table">
+                <thead><tr><th>Evaluador</th><th>Peso</th><th>Puntaje</th></tr></thead>
+                <tbody>
+                  {Object.entries(roleWeights).map(([roleKey,w])=>{
+                    const val = fs.roleScores[roleKey];
+                    return (
+                      <tr key={roleKey}>
+                        <td>{ROLES.find(r=>r.key===roleKey)?.label}</td>
+                        <td>{w}%</td>
+                        <td>{val!==null && val!==undefined ? val.toFixed(1) : 'Sin datos'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              <div className="print-section-title">Por componente</div>
+              <table className="print-table">
+                <thead><tr><th>Componente</th><th>Puntaje</th></tr></thead>
+                <tbody>
+                  {COMPONENTS.map(c=>(
+                    <tr key={c.key}>
+                      <td>{c.label}</td>
+                      <td>{breakdown[c.key]!==null ? breakdown[c.key].toFixed(1) : 'Sin datos'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           );
         })}
