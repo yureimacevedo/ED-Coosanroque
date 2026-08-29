@@ -357,7 +357,6 @@ const ROLES = [
   {key:'autoevaluacion', label:'Autoevaluación'},
   {key:'jefeInmediato', label:'Jefe inmediato / Superior'},
   {key:'par', label:'Par'},
-  {key:'subordinado', label:'Subordinado'},
   {key:'personasACargo', label:'Personas a cargo'},
   {key:'companeroOperativo', label:'Compañero (operativo)'},
 ];
@@ -369,7 +368,7 @@ const CATEGORIES = [
 ];
 const ROLE_COLORS = {
   autoevaluacion:'#3C5A73', jefeInmediato:'#6B7A5E', par:'#A9613D',
-  subordinado:'#8B8F84', personasACargo:'#B79A64', companeroOperativo:'#7C9AA6'
+  personasACargo:'#B79A64', companeroOperativo:'#7C9AA6'
 };
 const COMPONENT_COLORS = {
   habilidadesBlandas:'#3C5A73', habilidadesCore:'#6B7A5E', productividad:'#A9613D', conocimientosBasicos:'#B79A64'
@@ -381,14 +380,13 @@ function defaultComponentWeights(){
     autoevaluacion:{habilidadesBlandas:40, habilidadesCore:20, productividad:20, conocimientosBasicos:20},
     jefeInmediato:{habilidadesBlandas:40, habilidadesCore:30, productividad:30, conocimientosBasicos:0},
     par:{habilidadesBlandas:60, habilidadesCore:0, productividad:40, conocimientosBasicos:0},
-    subordinado:{habilidadesBlandas:60, habilidadesCore:0, productividad:40, conocimientosBasicos:0},
     personasACargo:{habilidadesBlandas:60, habilidadesCore:0, productividad:40, conocimientosBasicos:0},
     companeroOperativo:{habilidadesBlandas:100, habilidadesCore:0, productividad:0, conocimientosBasicos:0},
   };
 }
 function defaultEvaluatorWeights(){
   return {
-    gerencia:{autoevaluacion:20, jefeInmediato:50, subordinado:30},
+    gerencia:{autoevaluacion:20, jefeInmediato:80},
     lider:{autoevaluacion:20, par:20, jefeInmediato:40, personasACargo:20},
     liderTransversal:{autoevaluacion:20, par:20, jefeInmediato:60},
     operativo:{autoevaluacion:20, companeroOperativo:30, jefeInmediato:50},
@@ -547,15 +545,94 @@ const Gauge = ({value, big}) => {
 };
 
 /* =========================================================
-   LOGO — busca ./logo.png en la raíz del repositorio publicado.
-   Si no existe (todavía no lo subiste), simplemente no se muestra;
-   no rompe el diseño ni deja un ícono roto.
+   LOGO — si la entidad subió un logo desde "Marca", se usa ese
+   (una imagen en memoria, sin archivo). Si no, cae a buscar
+   ./logo.png en la raíz del repositorio; si tampoco existe,
+   simplemente no se muestra — no rompe el diseño.
    ========================================================= */
-const Logo = ({size}) => {
+const Logo = ({size, src}) => {
   const [failed, setFailed] = useState(false);
+  if(src) return <img src={src} alt="Logo de la entidad" className="brand-logo" style={size?{height:size}:undefined}/>;
   if(failed) return null;
   return <img src="./logo.png" alt="Logo de la entidad" className="brand-logo" style={size?{height:size}:undefined} onError={()=>setFailed(true)}/>;
 };
+
+/* =========================================================
+   IDENTIDAD DE MARCA — redimensiona el logo subido a algo liviano
+   (cabe cómodo en un documento de Firestore) y deriva la paleta de
+   acento completa (fuerte/oscuro/suave/pálido) a partir de un solo
+   color que elige el administrador, para que todo el sitio quede
+   coherente sin pedirle 4 colores distintos.
+   ========================================================= */
+function resizeImageFile(file, maxHeight){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxHeight / img.height);
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => reject(new Error('No se pudo leer la imagen'));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
+    reader.readAsDataURL(file);
+  });
+}
+function hexToHsl(hex){
+  hex = (hex||'#2A4256').replace('#','');
+  if(hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+  const r=parseInt(hex.slice(0,2),16)/255, g=parseInt(hex.slice(2,4),16)/255, b=parseInt(hex.slice(4,6),16)/255;
+  const max=Math.max(r,g,b), min=Math.min(r,g,b);
+  let h=0, s=0, l=(max+min)/2;
+  if(max!==min){
+    const d = max-min;
+    s = l>0.5 ? d/(2-max-min) : d/(max+min);
+    switch(max){
+      case r: h=(g-b)/d + (g<b?6:0); break;
+      case g: h=(b-r)/d + 2; break;
+      default: h=(r-g)/d + 4;
+    }
+    h /= 6;
+  }
+  return {h:h*360, s:s*100, l:l*100};
+}
+function hslToHex(h,s,l){
+  s/=100; l/=100;
+  const c=(1-Math.abs(2*l-1))*s;
+  const x=c*(1-Math.abs((h/60)%2-1));
+  const m=l-c/2;
+  let r=0,g=0,b=0;
+  if(h<60){r=c;g=x;b=0;} else if(h<120){r=x;g=c;b=0;} else if(h<180){r=0;g=c;b=x;}
+  else if(h<240){r=0;g=x;b=c;} else if(h<300){r=x;g=0;b=c;} else {r=c;g=0;b=x;}
+  const toHex = v => Math.round((v+m)*255).toString(16).padStart(2,'0');
+  return '#'+toHex(r)+toHex(g)+toHex(b);
+}
+function deriveAccentPalette(hex){
+  const {h,s,l} = hexToHsl(hex);
+  return {
+    accent: hex,
+    accentDeep: hslToHex(h, Math.min(s+5,100), Math.max(l-22,12)),
+    accentSoft: hslToHex(h, Math.max(s-30,10), Math.min(l+28,85)),
+    accentPale: hslToHex(h, Math.max(s-45,5), Math.min(l+38,94)),
+  };
+}
+function applyBrandColor(hex){
+  if(!hex) return;
+  const p = deriveAccentPalette(hex);
+  const root = document.documentElement.style;
+  root.setProperty('--accent', p.accent);
+  root.setProperty('--accent-deep', p.accentDeep);
+  root.setProperty('--accent-soft', p.accentSoft);
+  root.setProperty('--accent-pale', p.accentPale);
+}
 
 const LEGAL_HOLDER = 'Yureima Acevedo Arango';
 
@@ -591,11 +668,11 @@ const LegalNotice = ({dark}) => {
 /* =========================================================
    SETUP NOTICE — se muestra si firebaseConfig sigue en placeholder
    ========================================================= */
-const AuthShell = ({children}) => (
+const AuthShell = ({children, marca}) => (
   <div id="authGate">
     <div className="auth-visual">
       <div className="auth-visual-inner">
-        <div className="brand-row"><Logo size={40}/><span className="auth-mark">Talento · 270°</span></div>
+        <div className="brand-row"><Logo size={40} src={marca?.logoDataUrl}/><span className="auth-mark">Talento · 270°</span></div>
         <h1 className="auth-headline">Evaluación de<br/>desempeño 270°</h1>
         <div className="entidad-name on-dark" style={{fontSize:16, marginBottom:18}}>{ENTIDAD_NOMBRE}</div>
         <p className="auth-tagline">
@@ -637,6 +714,18 @@ const SetupNotice = () => (
 const App = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [marca, setMarca] = useState({logoDataUrl:null, brandColor:null});
+
+  useEffect(()=>{
+    if(CONFIG_IS_PLACEHOLDER) return;
+    const unsub = db.collection('entidades').doc(ENTIDAD_ID).onSnapshot(d=>{
+      const data = d.exists ? d.data() : {};
+      setMarca({logoDataUrl: data.logoDataUrl || null, brandColor: data.brandColor || null});
+    }, err=>console.error('No se pudo cargar la identidad de marca:', err));
+    return ()=>unsub();
+  },[]);
+
+  useEffect(()=>{ applyBrandColor(marca.brandColor); }, [marca.brandColor]);
 
   useEffect(()=>{
     if(CONFIG_IS_PLACEHOLDER){ setLoading(false); return; }
@@ -658,15 +747,15 @@ const App = () => {
 
   if(CONFIG_IS_PLACEHOLDER) return <SetupNotice/>;
   if(loading) return <div className="loading">Cargando…</div>;
-  if(!user) return <AuthGate/>;
-  if(user.isAnonymous) return <PortalApp/>;
-  return <AdminApp user={user}/>;
+  if(!user) return <AuthGate marca={marca}/>;
+  if(user.isAnonymous) return <PortalApp marca={marca}/>;
+  return <AdminApp user={user} marca={marca}/>;
 };
 
 /* =========================================================
    AUTH GATE — elegir administrador o colaborador
    ========================================================= */
-const AuthGate = () => {
+const AuthGate = ({marca}) => {
   const [mode, setMode] = useState('choice'); // choice | adminform
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -688,7 +777,7 @@ const AuthGate = () => {
 
   if(mode==='choice'){
     return (
-      <AuthShell>
+      <AuthShell marca={marca}>
         <h2 className="auth-panel-title">Ingresar</h2>
         <p className="auth-panel-sub">Selecciona cómo quieres entrar.</p>
         <div className="gate-choice">
@@ -700,7 +789,7 @@ const AuthGate = () => {
   }
 
   return (
-    <AuthShell>
+    <AuthShell marca={marca}>
       <h2 className="auth-panel-title">Acceso administrador</h2>
       <p className="auth-panel-sub">Ingresa con el correo y la contraseña creados en Firebase Authentication.</p>
       {error && <div className="login-error">⚠️ {error}</div>}
@@ -723,7 +812,7 @@ const AuthGate = () => {
 /* =========================================================
    PORTAL APP (colaborador) — sesión anónima
    ========================================================= */
-const PortalApp = () => {
+const PortalApp = ({marca}) => {
   const [periodos, setPeriodos] = useState([]);
   const [periodoId, setPeriodoId] = useState(null);
   const [collaborators, setCollaborators] = useState([]);
@@ -786,7 +875,7 @@ const PortalApp = () => {
     return (
       <div id="portal-shell">
         <div className="portal-top">
-          <div className="brand"><div className="brand-row"><Logo size={28}/><span className="mark">Talento · 270°</span></div><h1>Portal de colaboradores</h1><div className="entidad-name">{ENTIDAD_NOMBRE}</div></div>
+          <div className="brand"><div className="brand-row"><Logo size={28} src={marca?.logoDataUrl}/><span className="mark">Talento · 270°</span></div><h1>Portal de colaboradores</h1><div className="entidad-name">{ENTIDAD_NOMBRE}</div></div>
           <button className="back-link" style={{margin:0}} onClick={exit}>← Salir</button>
         </div>
         <div className="portal-body">
@@ -800,7 +889,7 @@ const PortalApp = () => {
   return (
     <div id="portal-shell">
       <div className="portal-top">
-        <div className="brand"><div className="brand-row"><Logo size={28}/><span className="mark">Talento · 270°</span></div><h1>Portal de colaboradores</h1><div className="entidad-name">{ENTIDAD_NOMBRE}</div></div>
+        <div className="brand"><div className="brand-row"><Logo size={28} src={marca?.logoDataUrl}/><span className="mark">Talento · 270°</span></div><h1>Portal de colaboradores</h1><div className="entidad-name">{ENTIDAD_NOMBRE}</div></div>
         <button className="back-link" style={{margin:0}} onClick={exit}>← Salir</button>
       </div>
       <div className="portal-body">
@@ -989,21 +1078,22 @@ const PortalForm = ({task, portalUser, config, collaborators, questionnaires, ev
    ========================================================= */
 const ADMIN_TABS = [
   {group:'Configurar', items:[
-    {key:'periodos', label:'Periodos', num:'00', needsPeriodo:false, adminOnly:true},
-    {key:'config', label:'Parametrización', num:'01', needsPeriodo:true, adminOnly:true},
-    {key:'questionnaires', label:'Cuestionarios', num:'02', needsPeriodo:true, adminOnly:true},
-    {key:'areas', label:'Áreas', num:'03', needsPeriodo:true, adminOnly:true},
-    {key:'collabs', label:'Colaboradores', num:'04', needsPeriodo:true, adminOnly:false},
-    {key:'assign', label:'Asignaciones', num:'05', needsPeriodo:true, adminOnly:false},
-    {key:'usuarios', label:'Usuarios', num:'06', needsPeriodo:true, adminOnly:true},
+    {key:'marca', label:'Marca', num:'00', needsPeriodo:false, adminOnly:true},
+    {key:'periodos', label:'Periodos', num:'01', needsPeriodo:false, adminOnly:true},
+    {key:'config', label:'Parametrización', num:'02', needsPeriodo:true, adminOnly:true},
+    {key:'questionnaires', label:'Cuestionarios', num:'03', needsPeriodo:true, adminOnly:true},
+    {key:'areas', label:'Áreas', num:'04', needsPeriodo:true, adminOnly:true},
+    {key:'collabs', label:'Colaboradores', num:'05', needsPeriodo:true, adminOnly:false},
+    {key:'assign', label:'Asignaciones', num:'06', needsPeriodo:true, adminOnly:false},
+    {key:'usuarios', label:'Usuarios', num:'07', needsPeriodo:true, adminOnly:true},
   ]},
   {group:'Operar', items:[
-    {key:'eval', label:'Captura manual', num:'07', needsPeriodo:true, adminOnly:false},
-    {key:'results', label:'Resultados', num:'08', needsPeriodo:true, adminOnly:false},
+    {key:'eval', label:'Captura manual', num:'08', needsPeriodo:true, adminOnly:false},
+    {key:'results', label:'Resultados', num:'09', needsPeriodo:true, adminOnly:false},
   ]},
 ];
 
-const AdminApp = ({user}) => {
+const AdminApp = ({user, marca}) => {
   const [vista, setVista] = useState('periodos');
   const [periodos, setPeriodos] = useState([]);
   const [periodoId, setPeriodoId] = useState(null);
@@ -1056,6 +1146,7 @@ const AdminApp = ({user}) => {
   const deleteEvaluation = async (id) => { await col('evaluations').doc(id).delete(); };
   const saveSupervisor = async (uid, data) => { await col('supervisores').doc(uid).set(data); };
   const deleteSupervisor = async (uid) => { await col('supervisores').doc(uid).delete(); };
+  const saveMarca = async (data) => { await db.collection('entidades').doc(ENTIDAD_ID).set(data, {merge:true}); };
 
   const logout = async () => { await auth.signOut(); };
 
@@ -1077,7 +1168,7 @@ const AdminApp = ({user}) => {
     <div className="app">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-row"><Logo size={30}/><span className="mark">Talento · 270°</span></div>
+          <div className="brand-row"><Logo size={30} src={marca?.logoDataUrl}/><span className="mark">Talento · 270°</span></div>
           <h1>Evaluación de desempeño</h1>
           <div className="entidad-name on-dark">{ENTIDAD_NOMBRE}</div>
           <div className="sub">{isSupervisor ? `Supervisor · ${misAreas.join(', ')}` : 'Panel de administración'}</div>
@@ -1107,13 +1198,16 @@ const AdminApp = ({user}) => {
 
         <button className="portal-link" onClick={logout}>Cerrar sesión</button>
         <div className="sidebar-foot">
-          Autoevaluación · Superior · Pares y subordinados · Compañeros<br/>
+          Autoevaluación · Superior · Pares · Personas a cargo · Compañeros<br/>
           + Evaluación de conocimientos básicos (quiz)
           <div style={{marginTop:10}}><LegalNotice dark/></div>
         </div>
       </aside>
 
       <main>
+        {vista==='marca' && !isSupervisor && (
+          <VistaMarca marca={marca} onSave={saveMarca}/>
+        )}
         {vista==='periodos' && !isSupervisor && (
           <VistaPeriodos periodos={periodos} periodoId={periodoId} onSelect={setPeriodoId}/>
         )}
@@ -1166,6 +1260,88 @@ const AdminApp = ({user}) => {
 /* =========================================================
    VISTA: PERIODOS
    ========================================================= */
+/* =========================================================
+   VISTA: MARCA (logo + color, editable desde la app)
+   ========================================================= */
+const VistaMarca = ({marca, onSave}) => {
+  const [preview, setPreview] = useState(marca.logoDataUrl || null);
+  const [color, setColor] = useState(marca.brandColor || '#2A4256');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(()=>{
+    setPreview(marca.logoDataUrl || null);
+    setColor(marca.brandColor || '#2A4256');
+  }, [marca.logoDataUrl, marca.brandColor]);
+
+  const onFileChange = async (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    if(!file.type.startsWith('image/')){ showToast('Selecciona un archivo de imagen'); return; }
+    try{
+      const dataUrl = await resizeImageFile(file, 160);
+      setPreview(dataUrl);
+    }catch(err){ showToast('No se pudo procesar la imagen: '+err.message); }
+  };
+
+  const guardar = async () => {
+    setBusy(true);
+    try{
+      await onSave({logoDataUrl: preview || null, brandColor: color});
+      showToast('Identidad de marca actualizada');
+    }catch(e){ showToast('Error: '+e.message); }
+    finally{ setBusy(false); }
+  };
+
+  const palette = deriveAccentPalette(color);
+
+  return (
+    <section>
+      <div className="view-head">
+        <div>
+          <span className="eyebrow">Marca</span>
+          <h2>Identidad de {ENTIDAD_NOMBRE}</h2>
+          <p className="desc">Sube el logo y define el color de marca de tu cooperativa. Se aplican al instante en el panel, el portal de colaboradores y la portada de acceso — sin tocar código.</p>
+        </div>
+      </div>
+
+      <div className="card">
+        <h3>Logo</h3>
+        <p className="hint">Se ajusta automáticamente a un tamaño liviano al subirlo — no te preocupes por el peso del archivo original.</p>
+        <div style={{display:'flex', alignItems:'center', gap:20}}>
+          <div style={{width:84, height:84, border:'1px dashed var(--border-strong)', borderRadius:'var(--radius)', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', background:'var(--surface-alt)', flexShrink:0}}>
+            {preview ? <img src={preview} alt="Vista previa del logo" style={{maxWidth:'100%', maxHeight:'100%'}}/> : <span style={{fontSize:11, color:'var(--ink-faint)', textAlign:'center', padding:6}}>Sin logo</span>}
+          </div>
+          <div>
+            <input type="file" accept="image/*" onChange={onFileChange}/>
+            {preview && <div style={{marginTop:8}}><button className="btn ghost small" onClick={()=>setPreview(null)}>Quitar logo</button></div>}
+          </div>
+        </div>
+      </div>
+
+      <div className="card" style={{marginTop:16}}>
+        <h3>Color de marca</h3>
+        <p className="hint">Se usa para la barra lateral, los botones principales y los acentos en todo el sitio. Los demás tonos (oscuro, suave, pálido) se calculan solos a partir de este.</p>
+        <div style={{display:'flex', alignItems:'center', gap:14, marginBottom:16}}>
+          <input type="color" value={color} onChange={e=>setColor(e.target.value)} style={{width:56, height:40, padding:2, cursor:'pointer', border:'1px solid var(--border-strong)', borderRadius:'var(--radius)'}}/>
+          <span style={{fontFamily:'var(--font-mono)', fontSize:13}}>{color}</span>
+        </div>
+        <div style={{display:'flex', gap:8}}>
+          {[['Fuerte',palette.accent],['Oscuro',palette.accentDeep],['Suave',palette.accentSoft],['Pálido',palette.accentPale]].map(([label,hex])=>(
+            <div key={label} style={{textAlign:'center'}}>
+              <div style={{width:52, height:36, borderRadius:'var(--radius)', background:hex, border:'1px solid var(--border)'}}></div>
+              <div style={{fontSize:10, color:'var(--ink-faint)', marginTop:3}}>{label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="save-bar">
+        <button className="btn" onClick={guardar} disabled={busy}>{busy?'Guardando…':'Guardar identidad'}</button>
+      </div>
+    </section>
+  );
+};
+
 const VistaPeriodos = ({periodos, periodoId, onSelect}) => {
   const [creating, setCreating] = useState(false);
   const [nombre, setNombre] = useState('');
@@ -1518,15 +1694,18 @@ const VistaParametrizacion = ({periodo, onSave}) => {
 
   return (
     <section>
-      <div className="view-head">
+      <div className="view-head no-print">
         <div>
           <span className="eyebrow">Parametrización</span>
           <h2>Configuración de {ENTIDAD_NOMBRE}</h2>
           <p className="desc">Ajusta los puntajes según tu propia política de evaluación para este periodo. Cada fila debe sumar 100%.</p>
         </div>
+        <div className="view-head-actions">
+          <button className="btn secondary small" onClick={()=>window.print()}>Imprimir</button>
+        </div>
       </div>
 
-      <div className="card">
+      <div className="card no-print">
         <h3>Periodo</h3>
         <div className="field" style={{maxWidth:320}}>
           <label>Etiqueta del periodo</label>
@@ -1538,7 +1717,7 @@ const VistaParametrizacion = ({periodo, onSave}) => {
         </div>
       </div>
 
-      <div className="card">
+      <div className="card no-print">
         <h3>Puntaje por componente, según evaluador</h3>
         <p className="hint">Qué porcentaje del puntaje que otorga cada tipo de evaluador corresponde a cada componente. Deja en 0 los componentes que ese evaluador no califica.</p>
         <table>
@@ -1559,7 +1738,7 @@ const VistaParametrizacion = ({periodo, onSave}) => {
         </table>
       </div>
 
-      <div className="card">
+      <div className="card no-print">
         <h3>Puntaje por evaluador, según categoría evaluada</h3>
         <p className="hint">Quién evalúa a cada categoría de colaborador y con qué peso. Incluye <strong>Líder transversal</strong> para líderes sin personas a cargo.</p>
         {CATEGORIES.map(cat=>(
@@ -1584,9 +1763,48 @@ const VistaParametrizacion = ({periodo, onSave}) => {
         ))}
       </div>
 
-      <div className="save-bar">
+      <div className="save-bar no-print">
         <button className="btn secondary" onClick={reset}>Restaurar valores de ejemplo</button>
         <button className="btn" onClick={save}>Guardar configuración</button>
+      </div>
+
+      {/* ===== INFORME IMPRIMIBLE — oculto en pantalla, visible solo al imprimir ===== */}
+      <div className="print-report">
+        <div className="print-page">
+          <div className="print-header">
+            <h1>{ENTIDAD_NOMBRE} — Parametrización de la evaluación</h1>
+            <p>Periodo: {periodoLabel || periodo.nombre} · Generado el {new Date().toLocaleDateString('es-CO', {year:'numeric', month:'long', day:'numeric'})}</p>
+          </div>
+
+          <div className="print-section-title">Puntaje por componente, según evaluador</div>
+          <table className="print-table">
+            <thead><tr><th>Evaluador</th><th>Habilidades blandas</th><th>Habilidades core</th><th>Productividad</th><th>Conocimientos básicos</th><th>Total</th></tr></thead>
+            <tbody>
+              {ROLES.map(role=>(
+                <tr key={role.key}>
+                  <td>{role.label}</td>
+                  {COMPONENTS.map(c=><td key={c.key}>{componentWeights[role.key][c.key]}%</td>)}
+                  <td>{rowTotal(role.key)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="print-section-title">Puntaje por evaluador, según categoría evaluada</div>
+          {CATEGORIES.map(cat=>(
+            <div key={cat.key} style={{marginBottom:14}}>
+              <div style={{fontSize:12, fontWeight:600, margin:'8px 0 4px'}}>{cat.label} — Total {catTotal(cat.key)}%</div>
+              <table className="print-table">
+                <thead><tr><th>Evaluador</th><th>Peso</th></tr></thead>
+                <tbody>
+                  {Object.entries(evaluatorWeights[cat.key]).map(([roleKey,val])=>(
+                    <tr key={roleKey}><td>{ROLES.find(r=>r.key===roleKey)?.label || roleKey}</td><td>{val}%</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -1906,7 +2124,7 @@ const VistaAsignaciones = ({periodo, collaborators, assignments, evaluations, on
               <span className="collab-meta">{evaluado.cargo||''}</span>
             </div>
             {Object.keys(roleWeights).map(roleKey=>{
-              const roleLabel = ROLES.find(r=>r.key===roleKey)?.label;
+              const roleLabel = ROLES.find(r=>r.key===roleKey)?.label || roleKey;
               if(roleKey==='autoevaluacion'){
                 const done = evaluations.some(e=>e.collaboratorId===evaluado.id && e.role==='autoevaluacion');
                 return (
@@ -2235,7 +2453,7 @@ const VistaResultados = ({periodo, collaborators, evaluations}) => {
                   <div className="ribbon">
                     {Object.entries(roleWeights).map(([roleKey,w])=>{
                       const has = fs.roleScores[roleKey]!==null && fs.roleScores[roleKey]!==undefined;
-                      return <span key={roleKey} style={{width:w+'%', background: has ? ROLE_COLORS[roleKey] : 'var(--surface-alt)'}} title={ROLES.find(r=>r.key===roleKey)?.label + (has?` — ${fs.roleScores[roleKey].toFixed(1)}`:' — sin datos')}></span>;
+                      return <span key={roleKey} style={{width:w+'%', background: has ? ROLE_COLORS[roleKey] : 'var(--surface-alt)'}} title={(ROLES.find(r=>r.key===roleKey)?.label || roleKey) + (has?` — ${fs.roleScores[roleKey].toFixed(1)}`:' — sin datos')}></span>;
                     })}
                   </div>
                 </div>
@@ -2317,7 +2535,7 @@ const VistaResultados = ({periodo, collaborators, evaluations}) => {
                     const val = fs.roleScores[roleKey];
                     return (
                       <tr key={roleKey}>
-                        <td>{ROLES.find(r=>r.key===roleKey)?.label}</td>
+                        <td>{ROLES.find(r=>r.key===roleKey)?.label || roleKey}</td>
                         <td>{w}%</td>
                         <td>{val!==null && val!==undefined ? val.toFixed(1) : 'Sin datos'}</td>
                       </tr>
@@ -2407,7 +2625,7 @@ Recomendaciones:
             const val = fs.roleScores[roleKey];
             return (
               <div className="breakdown-row" key={roleKey}>
-                <div className="bh"><span>{ROLES.find(r=>r.key===roleKey)?.label} · peso {w}%</span><b>{val!==null&&val!==undefined?val.toFixed(1):'—'}</b></div>
+                <div className="bh"><span>{ROLES.find(r=>r.key===roleKey)?.label || roleKey} · peso {w}%</span><b>{val!==null&&val!==undefined?val.toFixed(1):'—'}</b></div>
                 <div className="ribbon"><span style={{width:(val!==null&&val!==undefined?val:0)+'%', background:ROLE_COLORS[roleKey]}}></span></div>
               </div>
             );
