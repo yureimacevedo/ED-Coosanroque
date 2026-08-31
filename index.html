@@ -496,22 +496,33 @@ function genCode(){
 }
 function getQuestionnaireFor(questionnaires, componente, collaborator){
   const norm = (s)=> (s||'').trim().toLowerCase();
+  // Nivel más específico posible: un cuestionario dirigido a esta persona en particular,
+  // sin importar el componente — siempre gana si existe.
+  if(collaborator){
+    const porColaborador = questionnaires.find(q=>q.componente===componente && q.colaboradorId===collaborator.id);
+    if(porColaborador) return porColaborador;
+  }
   if(componente === QUIZ_COMPONENT){
     // Conocimientos básicos: a veces es igual para todos (general), a veces varía por área.
     const area = collaborator ? collaborator.area : '';
     if(area){
-      const specific = questionnaires.find(q=>q.componente===componente && norm(q.area)===norm(area));
+      const specific = questionnaires.find(q=>q.componente===componente && !q.colaboradorId && norm(q.area)===norm(area));
       if(specific) return specific;
     }
-    return questionnaires.find(q=>q.componente===componente && !norm(q.area)) || null;
+    return questionnaires.find(q=>q.componente===componente && !q.colaboradorId && !norm(q.area)) || null;
   }
-  // Habilidades blandas, habilidades core y productividad: varían por cargo.
+  // Habilidades blandas, habilidades core y productividad: cargo específico > categoría (ej. "líder") > general.
   const cargo = collaborator ? collaborator.cargo : '';
   if(cargo){
-    const specific = questionnaires.find(q=>q.componente===componente && norm(q.cargo)===norm(cargo));
-    if(specific) return specific;
+    const porCargo = questionnaires.find(q=>q.componente===componente && !q.colaboradorId && norm(q.cargo)===norm(cargo));
+    if(porCargo) return porCargo;
   }
-  return questionnaires.find(q=>q.componente===componente && !norm(q.cargo)) || null;
+  const categoria = collaborator ? collaborator.categoria : '';
+  if(categoria){
+    const porCategoria = questionnaires.find(q=>q.componente===componente && !q.colaboradorId && !norm(q.cargo) && q.categoria===categoria);
+    if(porCategoria) return porCategoria;
+  }
+  return questionnaires.find(q=>q.componente===componente && !q.colaboradorId && !norm(q.cargo) && !q.categoria) || null;
 }
 
 /* =========================================================
@@ -1232,7 +1243,7 @@ const AdminApp = ({user, marca}) => {
           <VistaParametrizacion periodo={periodo} onSave={savePeriodo}/>
         )}
         {vista==='questionnaires' && periodo && !isSupervisor && (
-          <VistaCuestionarios questionnaires={questionnaires} areas={areas} cargos={cargosDisponibles} onSave={saveQuestionnaire} onDelete={deleteQuestionnaire}/>
+          <VistaCuestionarios questionnaires={questionnaires} areas={areas} cargos={cargosDisponibles} collaborators={collaborators} onSave={saveQuestionnaire} onDelete={deleteQuestionnaire}/>
         )}
         {vista==='areas' && periodo && !isSupervisor && (
           <VistaAreas periodo={periodo} onSave={savePeriodo}/>
@@ -1830,21 +1841,34 @@ const VistaParametrizacion = ({periodo, onSave}) => {
 /* =========================================================
    VISTA: CUESTIONARIOS
    ========================================================= */
-const VistaCuestionarios = ({questionnaires, areas, cargos, onSave, onDelete}) => {
+const VistaCuestionarios = ({questionnaires, areas, cargos, collaborators, onSave, onDelete}) => {
   const [nombre, setNombre] = useState('');
   const [componente, setComponente] = useState(COMPONENTS[0].key);
+  const [nivel, setNivel] = useState('general'); // general | area | categoria | cargo | colaborador
   const [area, setArea] = useState('');
   const [cargo, setCargo] = useState('');
   const [cargoLibre, setCargoLibre] = useState('');
+  const [categoriaSel, setCategoriaSel] = useState(CATEGORIES[0].key);
+  const [colaboradorSel, setColaboradorSel] = useState('');
   const [quizFormFor, setQuizFormFor] = useState(null);
   const isQuizComp = componente===QUIZ_COMPONENT;
 
+  useEffect(()=>{ setNivel('general'); setArea(''); setCargo(''); setCargoLibre(''); setColaboradorSel(''); }, [componente]);
+
   const crear = async () => {
     if(!nombre.trim()){ showToast('Escribe un nombre para el cuestionario'); return; }
+    if(nivel==='colaborador' && !colaboradorSel){ showToast('Selecciona el colaborador'); return; }
+    if(nivel==='area' && !area){ showToast('Selecciona el área'); return; }
+    if(nivel==='cargo' && !(cargo==='__otro' ? cargoLibre.trim() : cargo)){ showToast('Selecciona o escribe el cargo'); return; }
     const id = 'q_' + Date.now();
     const cargoFinal = cargo==='__otro' ? cargoLibre.trim() : cargo;
-    await onSave({id, componente, area: isQuizComp ? area : '', cargo: isQuizComp ? '' : cargoFinal, nombre: nombre.trim(), preguntas:[]});
-    setNombre(''); setArea(''); setCargo(''); setCargoLibre('');
+    const data = {id, componente, nombre:nombre.trim(), preguntas:[], area:'', cargo:'', categoria:'', colaboradorId:''};
+    if(nivel==='colaborador') data.colaboradorId = colaboradorSel;
+    else if(isQuizComp && nivel==='area') data.area = area;
+    else if(!isQuizComp && nivel==='cargo') data.cargo = cargoFinal;
+    else if(!isQuizComp && nivel==='categoria') data.categoria = categoriaSel;
+    await onSave(data);
+    setNombre(''); setArea(''); setCargo(''); setCargoLibre(''); setColaboradorSel(''); setNivel('general');
     showToast('Cuestionario creado — ahora agrégale preguntas');
   };
 
@@ -1864,55 +1888,106 @@ const VistaCuestionarios = ({questionnaires, areas, cargos, onSave, onDelete}) =
     setQuizFormFor(null);
   };
 
+  const metaLabel = (q, isQuiz) => {
+    if(q.colaboradorId){
+      const c = (collaborators||[]).find(c=>c.id===q.colaboradorId);
+      return `Solo para: ${c ? c.nombre : 'colaborador ya no existe'}`;
+    }
+    if(isQuiz) return q.area ? `Área: ${q.area}` : 'General — aplica a todas las áreas';
+    if(q.categoria) return `Grupo: ${CATEGORIES.find(c=>c.key===q.categoria)?.label || q.categoria}`;
+    return q.cargo ? `Cargo: ${q.cargo}` : 'General — aplica a todos los cargos';
+  };
+
   return (
     <section>
-      <div className="view-head">
+      <div className="view-head no-print">
         <div>
           <span className="eyebrow">Contenido</span>
           <h2>Cuestionarios</h2>
           <p className="desc">
-            <strong>Habilidades blandas, core y productividad</strong> se segmentan por <strong>cargo</strong> — puedes tener varios por cargo, o dejarlo general para que aplique a todos.{' '}
-            <strong>Conocimientos básicos</strong> se segmenta por <strong>área</strong> (a veces es igual para toda la entidad, a veces varía por área) y se responde como quiz de opción múltiple con calificación automática; los demás componentes se responden en escala de 1 a 5.
+            <strong>Habilidades blandas, core y productividad</strong> se segmentan por <strong>cargo</strong>, por un <strong>grupo</strong> (categoría, ej. todos los líderes) o quedan <strong>generales</strong>.{' '}
+            <strong>Conocimientos básicos</strong> se segmenta por <strong>área</strong> y se responde como quiz de opción múltiple con calificación automática; los demás componentes se responden en escala de 1 a 5.{' '}
+            En cualquier componente puedes además dirigir un cuestionario a <strong>una sola persona</strong> — si existe uno así para alguien, ese siempre tiene prioridad sobre los demás.
           </p>
+        </div>
+        <div className="view-head-actions">
+          <button className="btn secondary small" onClick={()=>window.print()}>Imprimir</button>
         </div>
       </div>
 
-      <div className="card">
+      <div className="card no-print">
         <h3>Nuevo cuestionario</h3>
         <div className="field-row three">
-          <div className="field"><label>Nombre</label><input type="text" value={nombre} onChange={e=>setNombre(e.target.value)} placeholder="Ej. Habilidades core — Analista de crédito"/></div>
+          <div className="field"><label>Nombre</label><input type="text" value={nombre} onChange={e=>setNombre(e.target.value)} placeholder="Ej. Habilidades core — Líderes"/></div>
           <div className="field">
             <label>Componente</label>
             <select value={componente} onChange={e=>setComponente(e.target.value)}>
               {COMPONENTS.map(c=><option key={c.key} value={c.key}>{c.label}{c.key===QUIZ_COMPONENT?' (quiz)':''}</option>)}
             </select>
           </div>
-          {isQuizComp ? (
-            <div className="field">
-              <label>Área (vacío = general, aplica a todas)</label>
-              <select value={area} onChange={e=>setArea(e.target.value)}>
-                <option value="">General — todas las áreas</option>
-                {(areas||[]).map(a=><option key={a} value={a}>{a}</option>)}
-              </select>
-            </div>
-          ) : (
-            <div className="field">
-              <label>Cargo (vacío = general, aplica a todos)</label>
-              <select value={cargo} onChange={e=>setCargo(e.target.value)}>
-                <option value="">General — todos los cargos</option>
-                {(cargos||[]).map(c=><option key={c} value={c}>{c}</option>)}
-                <option value="__otro">+ Otro cargo (escribir)</option>
-              </select>
-              {cargo==='__otro' && (
-                <input type="text" style={{marginTop:8}} value={cargoLibre} onChange={e=>setCargoLibre(e.target.value)} placeholder="Nombre exacto del cargo"/>
+          <div className="field">
+            <label>Aplica a</label>
+            <select value={nivel} onChange={e=>setNivel(e.target.value)}>
+              <option value="general">General — {isQuizComp?'todas las áreas':'todos los cargos'}</option>
+              {isQuizComp ? (
+                <option value="area">Un área específica</option>
+              ) : (
+                <>
+                  <option value="categoria">Un grupo (ej. todos los líderes)</option>
+                  <option value="cargo">Un cargo específico</option>
+                </>
               )}
-            </div>
-          )}
+              <option value="colaborador">Una sola persona</option>
+            </select>
+          </div>
         </div>
-        <button className="btn" onClick={crear}>Crear cuestionario</button>
+
+        {nivel==='area' && isQuizComp && (
+          <div className="field" style={{maxWidth:300}}>
+            <label>Área</label>
+            <select value={area} onChange={e=>setArea(e.target.value)}>
+              <option value="">Selecciona un área</option>
+              {(areas||[]).map(a=><option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+        )}
+        {nivel==='categoria' && !isQuizComp && (
+          <div className="field" style={{maxWidth:300}}>
+            <label>Grupo</label>
+            <select value={categoriaSel} onChange={e=>setCategoriaSel(e.target.value)}>
+              {CATEGORIES.map(c=><option key={c.key} value={c.key}>{c.label}</option>)}
+            </select>
+            <p className="hint">Aplica a todos los colaboradores de este grupo, sin importar su cargo exacto — a menos que alguno tenga además un cuestionario por cargo o por persona, que tiene prioridad.</p>
+          </div>
+        )}
+        {nivel==='cargo' && !isQuizComp && (
+          <div className="field" style={{maxWidth:300}}>
+            <label>Cargo</label>
+            <select value={cargo} onChange={e=>setCargo(e.target.value)}>
+              <option value="">Selecciona un cargo</option>
+              {(cargos||[]).map(c=><option key={c} value={c}>{c}</option>)}
+              <option value="__otro">+ Otro cargo (escribir)</option>
+            </select>
+            {cargo==='__otro' && (
+              <input type="text" style={{marginTop:8}} value={cargoLibre} onChange={e=>setCargoLibre(e.target.value)} placeholder="Nombre exacto del cargo"/>
+            )}
+          </div>
+        )}
+        {nivel==='colaborador' && (
+          <div className="field" style={{maxWidth:320}}>
+            <label>Colaborador</label>
+            <select value={colaboradorSel} onChange={e=>setColaboradorSel(e.target.value)}>
+              <option value="">Selecciona un colaborador</option>
+              {(collaborators||[]).map(c=><option key={c.id} value={c.id}>{c.nombre}{c.cargo?' — '+c.cargo:''}</option>)}
+            </select>
+            <p className="hint">Este cuestionario reemplaza a cualquier otro para esta persona en este componente.</p>
+          </div>
+        )}
+
+        <button className="btn" style={{marginTop:12}} onClick={crear}>Crear cuestionario</button>
       </div>
 
-      <div className="card" style={{marginTop:16}}>
+      <div className="card no-print" style={{marginTop:16}}>
         <h3>Cuestionarios existentes</h3>
         {COMPONENTS.map(comp=>{
           const items = questionnaires.filter(q=>q.componente===comp.key);
@@ -1927,9 +2002,7 @@ const VistaCuestionarios = ({questionnaires, areas, cargos, onSave, onDelete}) =
                     <div>
                       <h4>{q.nombre}</h4>
                       <div className="q-card-meta">
-                        {isQuiz
-                          ? (q.area ? `Área: ${q.area}` : 'General — aplica a todas las áreas')
-                          : (q.cargo ? `Cargo: ${q.cargo}` : 'General — aplica a todos los cargos')}
+                        {metaLabel(q, isQuiz)}
                         {' '}· {q.preguntas.length} preguntas
                       </div>
                     </div>
@@ -1960,6 +2033,46 @@ const VistaCuestionarios = ({questionnaires, areas, cargos, onSave, onDelete}) =
             </div>
           );
         })}
+      </div>
+
+      {/* ===== INFORME IMPRIMIBLE ===== */}
+      <div className="print-report">
+        <div className="print-page">
+          <div className="print-header">
+            <h1>{ENTIDAD_NOMBRE} — Cuestionarios</h1>
+            <p>Generado el {new Date().toLocaleDateString('es-CO', {year:'numeric', month:'long', day:'numeric'})}</p>
+          </div>
+          {questionnaires.length===0 ? <p>Todavía no hay cuestionarios creados.</p> : COMPONENTS.map(comp=>{
+            const items = questionnaires.filter(q=>q.componente===comp.key);
+            if(items.length===0) return null;
+            const isQuiz = comp.key===QUIZ_COMPONENT;
+            return (
+              <div key={comp.key}>
+                <div className="print-section-title">{comp.label}</div>
+                {items.map(q=>(
+                  <div key={q.id} style={{marginBottom:12}}>
+                    <div style={{fontSize:12.5, fontWeight:600, margin:'8px 0 2px'}}>{q.nombre}</div>
+                    <div style={{fontSize:10.5, color:'#5C6058', marginBottom:4}}>{metaLabel(q, isQuiz)} · {q.preguntas.length} preguntas</div>
+                    {q.preguntas.length===0 ? <p style={{fontSize:11}}>Sin preguntas todavía.</p> : (
+                      <table className="print-table">
+                        <thead><tr><th>#</th><th>Pregunta</th>{isQuiz && <th>Opciones (✓ correcta)</th>}</tr></thead>
+                        <tbody>
+                          {q.preguntas.map((p,i)=>(
+                            <tr key={p.id}>
+                              <td>{i+1}</td>
+                              <td>{p.texto}</td>
+                              {isQuiz && <td>{p.opciones ? p.opciones.map((o,oi)=> oi===p.correcta ? `✓ ${o}` : o).join('  ·  ') : ''}</td>}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
