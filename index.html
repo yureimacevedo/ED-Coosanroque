@@ -15,6 +15,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous"></script>
 <style>
   :root{
     --bg:#EDEEE9; --surface:#FFFFFF; --surface-alt:#E3E5DE;
@@ -493,6 +494,21 @@ function genCode(){
   const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let s=''; for(let i=0;i<6;i++) s+=chars[Math.floor(Math.random()*chars.length)];
   return s;
+}
+// Convierte un nombre de colaborador en un nombre de archivo seguro (sin tildes,
+// espacios ni caracteres especiales) y evita choques si dos personas quedarían
+// con el mismo nombre de archivo.
+function nombreArchivoUnico(nombre, usados){
+  let base = (nombre||'colaborador')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // quita tildes
+    .replace(/[^a-zA-Z0-9]+/g,'_')
+    .replace(/^_+|_+$/g,'')
+    .toLowerCase() || 'colaborador';
+  let candidato = base;
+  let n = 2;
+  while(usados[candidato]){ candidato = `${base}_${n}`; n++; }
+  usados[candidato] = true;
+  return candidato;
 }
 function getQuestionnaireFor(questionnaires, componente, collaborator){
   const norm = (s)=> (s||'').trim().toLowerCase();
@@ -2689,6 +2705,58 @@ const VistaResultados = ({periodo, collaborators, evaluations}) => {
     URL.revokeObjectURL(url);
   };
 
+  const exportarWordPorColaborador = async () => {
+    const {Document, Packer, Paragraph, Table, TableRow, TableCell, HeadingLevel, WidthType} = docx;
+    const fechaGenerado = new Date().toLocaleDateString('es-CO', {year:'numeric', month:'long', day:'numeric'});
+    const zip = new JSZip();
+    const nombresUsados = {};
+
+    for(const {p,fs} of rows){
+      const catLabel = CATEGORIES.find(c=>c.key===p.categoria)?.label || p.categoria;
+      const estado = fs.score!==null ? classifySemaforo(fs.score, scoreConfig) : null;
+      const breakdown = componentBreakdownFor(p, periodo.evaluatorWeights, periodo.componentWeights, evaluations);
+      const roleWeights = periodo.evaluatorWeights[p.categoria] || {};
+
+      const children = [
+        new Paragraph({text:`${ENTIDAD_NOMBRE} — Informe individual`, heading:HeadingLevel.HEADING_1}),
+        new Paragraph({text:`Periodo: ${periodo.periodoLabel || periodo.nombre} · Generado el ${fechaGenerado}`}),
+        new Paragraph({text:''}),
+        new Paragraph({text:p.nombre, heading:HeadingLevel.HEADING_1}),
+        new Paragraph({text:`${p.cargo || 'Sin cargo'} ${p.area ? '· '+p.area : ''} · ${catLabel}`}),
+        new Paragraph({text:`Score final: ${fs.score!==null?fs.score.toFixed(1):'—'} — ${estado ? semaforoLabel(estado) : 'Sin datos'}`, bold:true}),
+        new Paragraph({text:''}),
+        new Paragraph({text:'Por evaluador', heading:HeadingLevel.HEADING_2}),
+      ];
+      const evalHeaderRow = new TableRow({children:['Evaluador','Peso','Puntaje'].map(h=>new TableCell({children:[new Paragraph({text:h, bold:true})]}))});
+      const evalDataRows = Object.entries(roleWeights).map(([roleKey,w])=>{
+        const val = fs.roleScores[roleKey];
+        return new TableRow({children:[
+          new TableCell({children:[new Paragraph(ROLES.find(r=>r.key===roleKey)?.label || roleKey)]}),
+          new TableCell({children:[new Paragraph(w+'%')]}),
+          new TableCell({children:[new Paragraph(val!==null && val!==undefined ? val.toFixed(1) : 'Sin datos')]}),
+        ]});
+      });
+      children.push(new Table({width:{size:100,type:WidthType.PERCENTAGE}, rows:[evalHeaderRow, ...evalDataRows]}));
+      children.push(new Paragraph({text:''}));
+      children.push(new Paragraph({text:'Por componente', heading:HeadingLevel.HEADING_2}));
+      const compHeaderRow = new TableRow({children:['Componente','Puntaje'].map(h=>new TableCell({children:[new Paragraph({text:h, bold:true})]}))});
+      const compDataRows = COMPONENTS.map(c=>new TableRow({children:[
+        new TableCell({children:[new Paragraph(c.label)]}),
+        new TableCell({children:[new Paragraph(breakdown[c.key]!==null ? breakdown[c.key].toFixed(1) : 'Sin datos')]}),
+      ]}));
+      children.push(new Table({width:{size:100,type:WidthType.PERCENTAGE}, rows:[compHeaderRow, ...compDataRows]}));
+
+      const blob = await Packer.toBlob(new Document({sections:[{children}]}));
+      const arrayBuffer = await blob.arrayBuffer();
+      zip.file(nombreArchivoUnico(p.nombre, nombresUsados) + '.docx', arrayBuffer);
+    }
+
+    const zipBlob = await zip.generateAsync({type:'blob'});
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a'); a.href=url; a.download=`informes_individuales_${periodo.nombre}.zip`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <section>
       <div className="view-head no-print">
@@ -2704,6 +2772,7 @@ const VistaResultados = ({periodo, collaborators, evaluations}) => {
         <div className="view-head-actions">
           <button className="btn secondary small" onClick={exportarExcel}>Exportar Excel</button>
           <button className="btn secondary small" onClick={exportarWord}>Exportar Word</button>
+          <button className="btn secondary small" onClick={exportarWordPorColaborador}>Exportar Word (por colaborador)</button>
           <button className="btn secondary small" onClick={()=>window.print()}>Imprimir</button>
         </div>
       </div>
