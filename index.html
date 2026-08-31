@@ -2593,6 +2593,8 @@ const ManualRoleBlock = ({roleKey, roleWeights, periodo, collab, evaluations, on
     const o={}; applicableComponents.forEach(c=>o[c.key]=70); return o;
   });
   const role = ROLES.find(r=>r.key===roleKey);
+  const roleLabel = role?.label || roleKey;
+  const roleColor = ROLE_COLORS[roleKey] || 'var(--ink-faint)';
   const entries = evaluations.filter(e=>e.collaboratorId===collab.id && e.role===roleKey);
 
   const guardar = async () => {
@@ -2606,7 +2608,7 @@ const ManualRoleBlock = ({roleKey, roleWeights, periodo, collab, evaluations, on
   return (
     <div className="role-block">
       <div className="role-block-head">
-        <h4>{role.label} <span className="tag" style={{background:ROLE_COLORS[roleKey]+'22', color:ROLE_COLORS[roleKey]}}>{roleWeights[roleKey]}% del total</span></h4>
+        <h4>{roleLabel} <span className="tag" style={{background:roleColor+'22', color:roleColor}}>{roleWeights[roleKey]}% del total</span></h4>
         <button className="btn secondary small" onClick={()=>setFormOpen(!formOpen)}>{formOpen?'Cancelar':'+ Agregar evaluación'}</button>
       </div>
       {entries.length===0 ? <p className="hint" style={{margin:0}}>Sin evaluaciones registradas.</p> : entries.map(ev=>{
@@ -2872,7 +2874,7 @@ const VistaResultados = ({periodo, collaborators, evaluations}) => {
                   <div className="ribbon">
                     {Object.entries(roleWeights).map(([roleKey,w])=>{
                       const has = fs.roleScores[roleKey]!==null && fs.roleScores[roleKey]!==undefined;
-                      return <span key={roleKey} style={{width:w+'%', background: has ? ROLE_COLORS[roleKey] : 'var(--surface-alt)'}} title={(ROLES.find(r=>r.key===roleKey)?.label || roleKey) + (has?` — ${fs.roleScores[roleKey].toFixed(1)}`:' — sin datos')}></span>;
+                      return <span key={roleKey} style={{width:w+'%', background: has ? (ROLE_COLORS[roleKey] || 'var(--ink-faint)') : 'var(--surface-alt)'}} title={(ROLES.find(r=>r.key===roleKey)?.label || roleKey) + (has?` — ${fs.roleScores[roleKey].toFixed(1)}`:' — sin datos')}></span>;
                     })}
                   </div>
                 </div>
@@ -3045,7 +3047,7 @@ Recomendaciones:
             return (
               <div className="breakdown-row" key={roleKey}>
                 <div className="bh"><span>{ROLES.find(r=>r.key===roleKey)?.label || roleKey} · peso {w}%</span><b>{val!==null&&val!==undefined?val.toFixed(1):'—'}</b></div>
-                <div className="ribbon"><span style={{width:(val!==null&&val!==undefined?val:0)+'%', background:ROLE_COLORS[roleKey]}}></span></div>
+                <div className="ribbon"><span style={{width:(val!==null&&val!==undefined?val:0)+'%', background:ROLE_COLORS[roleKey] || 'var(--ink-faint)'}}></span></div>
               </div>
             );
           })}
