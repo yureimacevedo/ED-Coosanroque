@@ -20,7 +20,7 @@
   :root{
     --bg:#EDEEE9; --surface:#FFFFFF; --surface-alt:#E3E5DE;
     --ink:#232620; --ink-soft:#5C6058; --ink-faint:#8B8F84;
-    --accent:#3C5A73; --accent-deep:#2A4256; --accent-soft:#A9C1CE; --accent-pale:#E4ECEF;
+    --accent:#276AAB; --accent-deep:#1A4F82; --accent-soft:#97B1CA; --accent-pale:#C0CAD3;
     --moss:#6B7A5E; --moss-pale:#E7ECE2; --clay:#A9613D; --clay-pale:#F3E4DA; --gold:#B79A64;
     --border:#D6D8D0; --border-strong:#BFC2B8; --radius:3px;
     --font-display:'Space Grotesk', sans-serif; --font-body:'Inter', sans-serif; --font-mono:'JetBrains Mono', monospace;
@@ -651,9 +651,9 @@ function deriveAccentPalette(hex){
   const {h,s,l} = hexToHsl(hex);
   return {
     accent: hex,
-    accentDeep: hslToHex(h, Math.min(s+5,100), Math.max(l-22,12)),
-    accentSoft: hslToHex(h, Math.max(s-30,10), Math.min(l+28,85)),
-    accentPale: hslToHex(h, Math.max(s-45,5), Math.min(l+38,94)),
+    accentDeep: hslToHex(h, Math.min(s+5,100), Math.max(l*0.72, 18)),
+    accentSoft: hslToHex(h, Math.max(s-30,12), Math.min(l+30,82)),
+    accentPale: hslToHex(h, Math.max(s-45,8), Math.min(l+42,92)),
   };
 }
 function applyBrandColor(hex){
@@ -1356,7 +1356,7 @@ const AdminApp = ({user, marca}) => {
    ========================================================= */
 const VistaMarca = ({marca, onSave}) => {
   const [preview, setPreview] = useState(marca.logoDataUrl || null);
-  const [color, setColor] = useState(marca.brandColor || '#2A4256');
+  const [color, setColor] = useState(marca.brandColor || '#276AAB');
   const [busy, setBusy] = useState(false);
 
   useEffect(()=>{
