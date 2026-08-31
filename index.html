@@ -37,7 +37,12 @@
   .sidebar{background:var(--accent-deep); color:#EAF0F2; padding:24px 22px; display:flex; flex-direction:column; gap:20px;}
   .brand{display:flex; flex-direction:column; gap:2px;}
   .brand-row{display:flex; align-items:center; gap:10px;}
-  .brand-logo{height:32px; width:auto; max-width:120px; object-fit:contain; border-radius:2px;}
+  .brand-logo-block{display:flex; flex-direction:column; align-items:flex-start; gap:8px;}
+  .brand-logo{height:32px; width:auto; max-width:120px; object-fit:contain; display:block;}
+  .logo-card{background:#fff; border-radius:10px; padding:8px 10px; display:inline-flex; align-items:center; box-shadow:0 2px 8px rgba(0,0,0,0.18);}
+  .logo-card.big{padding:16px 20px; border-radius:14px;}
+  .mark-badge{display:inline-flex; align-items:center; gap:7px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.2); border-radius:999px; padding:6px 14px; font-family:var(--font-mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--accent-soft);}
+  .mark-badge .dot{width:6px; height:6px; border-radius:50%; background:var(--accent-soft); flex-shrink:0;}
   .copyright-line{font-size:10.5px; color:#7C9AA6; margin-top:2px;}
   .portal-top .copyright-line{color:var(--ink-faint); text-align:center; margin-top:2px;}
   .brand .mark{font-family:var(--font-mono); font-size:11px; letter-spacing:.14em; color:var(--accent-soft); text-transform:uppercase;}
@@ -672,7 +677,10 @@ const AuthShell = ({children, marca}) => (
   <div id="authGate">
     <div className="auth-visual">
       <div className="auth-visual-inner">
-        <div className="brand-row"><Logo size={40} src={marca?.logoDataUrl}/><span className="auth-mark">Talento · 270°</span></div>
+        {marca?.logoDataUrl && (
+          <div className="logo-card big" style={{marginBottom:18}}><Logo size={88} src={marca.logoDataUrl}/></div>
+        )}
+        <div className="mark-badge"><span className="dot"></span>Talento · 270°</div>
         <h1 className="auth-headline">Evaluación de<br/>desempeño 270°</h1>
         <div className="entidad-name on-dark" style={{fontSize:16, marginBottom:18}}>{ENTIDAD_NOMBRE}</div>
         <p className="auth-tagline">
@@ -875,7 +883,10 @@ const PortalApp = ({marca}) => {
     return (
       <div id="portal-shell">
         <div className="portal-top">
-          <div className="brand"><div className="brand-row"><Logo size={28} src={marca?.logoDataUrl}/><span className="mark">Talento · 270°</span></div><h1>Portal de colaboradores</h1><div className="entidad-name">{ENTIDAD_NOMBRE}</div></div>
+          <div className="brand"><div className="brand-logo-block">
+            {marca?.logoDataUrl && <div className="logo-card"><Logo size={44} src={marca.logoDataUrl}/></div>}
+            <span className="mark">Talento · 270°</span>
+          </div><h1>Portal de colaboradores</h1><div className="entidad-name">{ENTIDAD_NOMBRE}</div></div>
           <button className="back-link" style={{margin:0}} onClick={exit}>← Salir</button>
         </div>
         <div className="portal-body">
@@ -889,7 +900,10 @@ const PortalApp = ({marca}) => {
   return (
     <div id="portal-shell">
       <div className="portal-top">
-        <div className="brand"><div className="brand-row"><Logo size={28} src={marca?.logoDataUrl}/><span className="mark">Talento · 270°</span></div><h1>Portal de colaboradores</h1><div className="entidad-name">{ENTIDAD_NOMBRE}</div></div>
+        <div className="brand"><div className="brand-logo-block">
+            {marca?.logoDataUrl && <div className="logo-card"><Logo size={44} src={marca.logoDataUrl}/></div>}
+            <span className="mark">Talento · 270°</span>
+          </div><h1>Portal de colaboradores</h1><div className="entidad-name">{ENTIDAD_NOMBRE}</div></div>
         <button className="back-link" style={{margin:0}} onClick={exit}>← Salir</button>
       </div>
       <div className="portal-body">
@@ -1168,7 +1182,10 @@ const AdminApp = ({user, marca}) => {
     <div className="app">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-row"><Logo size={30} src={marca?.logoDataUrl}/><span className="mark">Talento · 270°</span></div>
+          <div className="brand-logo-block">
+            {marca?.logoDataUrl && <div className="logo-card"><Logo size={44} src={marca.logoDataUrl}/></div>}
+            <span className="mark">Talento · 270°</span>
+          </div>
           <h1>Evaluación de desempeño</h1>
           <div className="entidad-name on-dark">{ENTIDAD_NOMBRE}</div>
           <div className="sub">{isSupervisor ? `Supervisor · ${misAreas.join(', ')}` : 'Panel de administración'}</div>
