@@ -850,9 +850,9 @@ const AuthGate = ({marca}) => {
 const PortalApp = ({marca}) => {
   const [periodos, setPeriodos] = useState([]);
   const [periodoId, setPeriodoId] = useState(null);
-  const [collaborators, setCollaborators] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [evaluations, setEvaluations] = useState([]);
+  const [relevantCollaborators, setRelevantCollaborators] = useState([]);
   const [questionnaires, setQuestionnaires] = useState([]);
   const [config, setConfig] = useState(null);
   const [portalUser, setPortalUser] = useState(null);
@@ -860,6 +860,7 @@ const PortalApp = ({marca}) => {
   const [activeTask, setActiveTask] = useState(null);
   const [code, setCode] = useState('');
   const [loginError, setLoginError] = useState(false);
+  const [loggingIn, setLoggingIn] = useState(false);
 
   useEffect(()=>{
     const unsub = entidadPeriodos().where('activo','==', true).onSnapshot(snap=>{
@@ -870,25 +871,71 @@ const PortalApp = ({marca}) => {
     return ()=>unsub();
   },[]);
 
+  // Antes de iniciar sesión, solo se carga lo mínimo: el propio periodo y sus
+  // cuestionarios (un puñado de documentos, sin importar cuántos colaboradores
+  // tenga la entidad). Nunca se descarga la lista completa de colaboradores,
+  // asignaciones ni evaluaciones aquí — eso evita que la sola pantalla de login
+  // ya cueste lecturas proporcionales al tamaño de toda la organización.
   useEffect(()=>{
-    if(!periodoId){ setCollaborators([]); setAssignments([]); setEvaluations([]); setQuestionnaires([]); setConfig(null); return; }
+    if(!periodoId){ setQuestionnaires([]); setConfig(null); return; }
     const ref = entidadPeriodos().doc(periodoId);
     const u0 = ref.onSnapshot(d=>setConfig(d.exists ? {id:d.id, ...d.data()} : null));
-    const u1 = ref.collection('collaborators').onSnapshot(s=>{const a=[];s.forEach(d=>a.push({id:d.id,...d.data()}));setCollaborators(a);});
-    const u2 = ref.collection('assignments').onSnapshot(s=>{const a=[];s.forEach(d=>a.push({id:d.id,...d.data()}));setAssignments(a);});
-    const u3 = ref.collection('evaluations').onSnapshot(s=>{const a=[];s.forEach(d=>a.push({id:d.id,...d.data()}));setEvaluations(a);});
     const u4 = ref.collection('questionnaires').onSnapshot(s=>{const a=[];s.forEach(d=>a.push({id:d.id,...d.data()}));setQuestionnaires(a);});
-    return ()=>{u0();u1();u2();u3();u4();};
+    return ()=>{u0();u4();};
   },[periodoId]);
 
-  const exit = async () => { setPortalUser(null); setView('login'); await auth.signOut(); };
+  // Una vez la persona entra con su código, se suscribe solo a SUS propias
+  // asignaciones y evaluaciones (consultas filtradas, no la colección entera).
+  useEffect(()=>{
+    if(!portalUser || !periodoId){ setAssignments([]); setEvaluations([]); return; }
+    const ref = entidadPeriodos().doc(periodoId);
+    const u1 = ref.collection('assignments').where('evaluadorId','==',portalUser.id).onSnapshot(s=>{
+      const a=[]; s.forEach(d=>a.push({id:d.id,...d.data()})); setAssignments(a);
+    });
+    const u2 = ref.collection('evaluations').where('evaluatorId','==',portalUser.id).onSnapshot(s=>{
+      const a=[]; s.forEach(d=>a.push({id:d.id,...d.data()})); setEvaluations(a);
+    });
+    return ()=>{u1();u2();};
+  },[portalUser, periodoId]);
 
-  const tryLogin = () => {
-    const found = collaborators.find(c=>c.accessCode===code.trim().toUpperCase());
-    if(!found){ setLoginError(true); return; }
-    setLoginError(false);
-    setPortalUser(found);
-    setView('tasks');
+  // Y solo se traen las fichas de las personas que de verdad necesita ver:
+  // ella misma, más quienes le tocó evaluar según sus asignaciones — nunca
+  // el directorio completo de la entidad.
+  useEffect(()=>{
+    if(!portalUser || !periodoId){ setRelevantCollaborators([]); return; }
+    const ids = Array.from(new Set([portalUser.id, ...assignments.map(a=>a.evaluadoId).filter(Boolean)]));
+    let cancelled = false;
+    const ref = entidadPeriodos().doc(periodoId).collection('collaborators');
+    const chunks = [];
+    for(let i=0;i<ids.length;i+=30) chunks.push(ids.slice(i,i+30));
+    Promise.all(chunks.map(chunk => ref.where(firebase.firestore.FieldPath.documentId(),'in',chunk).get()))
+      .then(snaps=>{
+        if(cancelled) return;
+        const arr = [];
+        snaps.forEach(snap => snap.forEach(d=>arr.push({id:d.id, ...d.data()})));
+        if(!arr.some(c=>c.id===portalUser.id)) arr.push(portalUser);
+        setRelevantCollaborators(arr);
+      })
+      .catch(()=>{ if(!cancelled) setRelevantCollaborators([portalUser]); });
+    return ()=>{ cancelled = true; };
+  },[portalUser, periodoId, assignments]);
+
+  const exit = async () => { setPortalUser(null); setView('login'); setCode(''); await auth.signOut(); };
+
+  const tryLogin = async () => {
+    const codeTrim = code.trim().toUpperCase();
+    if(!codeTrim){ setLoginError(true); return; }
+    setLoggingIn(true);
+    try{
+      // Consulta puntual por el código exacto — cuesta una lectura, no toda la colección.
+      const snap = await entidadPeriodos().doc(periodoId).collection('collaborators').where('accessCode','==',codeTrim).limit(1).get();
+      if(snap.empty){ setLoginError(true); setLoggingIn(false); return; }
+      const doc = snap.docs[0];
+      setLoginError(false);
+      setPortalUser({id:doc.id, ...doc.data()});
+      setView('tasks');
+    }catch(e){ setLoginError(true); }
+    finally{ setLoggingIn(false); }
   };
 
   const getPendingTasks = (u) => {
@@ -900,7 +947,7 @@ const PortalApp = ({marca}) => {
     }
     assignments.filter(a=>a.evaluadorId===u.id).forEach(a=>{
       const done = evaluations.some(e=>e.assignmentId===a.id);
-      const evaluado = collaborators.find(c=>c.id===a.evaluadoId);
+      const evaluado = relevantCollaborators.find(c=>c.id===a.evaluadoId);
       tasks.push({kind:'assigned', assignmentId:a.id, evaluadoId:a.evaluadoId, evaluadoNombre: evaluado?evaluado.nombre:'—', role:a.role, done});
     });
     return tasks;
@@ -950,7 +997,7 @@ const PortalApp = ({marca}) => {
             <input type="text" placeholder="XXXXXX" maxLength={8} value={code}
               onChange={e=>setCode(e.target.value)}
               onKeyDown={e=>{ if(e.key==='Enter') tryLogin(); }}/>
-            <button className="btn" onClick={tryLogin}>Ingresar</button>
+            <button className="btn" onClick={tryLogin} disabled={loggingIn}>{loggingIn ? 'Verificando…' : 'Ingresar'}</button>
             {loginError && <div className="login-error">Código no encontrado. Verifica con tu área de talento humano.</div>}
           </div>
         )}
@@ -967,7 +1014,7 @@ const PortalApp = ({marca}) => {
         {view==='form' && portalUser && activeTask && (
           <PortalForm
             task={activeTask} portalUser={portalUser} config={config}
-            collaborators={collaborators} questionnaires={questionnaires} evaluations={evaluations}
+            collaborators={relevantCollaborators} questionnaires={questionnaires} evaluations={evaluations}
             periodoId={periodoId}
             onBack={()=>setView('tasks')}
             onDone={()=>setView('done')}
