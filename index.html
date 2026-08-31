@@ -2006,6 +2006,13 @@ const VistaColaboradores = ({periodo, collaborators, evaluations, areas, restric
   const [area, setArea] = useState(opcionesArea[0] || '');
   const [categoria, setCategoria] = useState(CATEGORIES[0].key);
 
+  const [editingId, setEditingId] = useState(null);
+  const [editDraft, setEditDraft] = useState({nombre:'', cargo:'', area:'', categoria:''});
+
+  const [filterText, setFilterText] = useState('');
+  const [filterArea, setFilterArea] = useState('');
+  const [filterCat, setFilterCat] = useState('');
+
   useEffect(()=>{ if(!opcionesArea.includes(area)) setArea(opcionesArea[0] || ''); }, [restrictAreas, areas]);
 
   const agregar = async () => {
@@ -2021,17 +2028,40 @@ const VistaColaboradores = ({periodo, collaborators, evaluations, areas, restric
     await onCascadeDelete(id);
   };
 
+  const startEdit = (p) => { setEditingId(p.id); setEditDraft({nombre:p.nombre, cargo:p.cargo||'', area:p.area||'', categoria:p.categoria}); };
+  const cancelEdit = () => setEditingId(null);
+  const saveEdit = async (p) => {
+    if(!editDraft.nombre.trim()){ showToast('Escribe el nombre del colaborador'); return; }
+    await onSave({...p, nombre:editDraft.nombre.trim(), cargo:editDraft.cargo.trim(), area:editDraft.area||'', categoria:editDraft.categoria});
+    setEditingId(null);
+    showToast('Colaborador actualizado');
+  };
+
+  const filtered = collaborators.filter(p=>{
+    if(filterArea && p.area !== filterArea) return false;
+    if(filterCat && p.categoria !== filterCat) return false;
+    if(filterText.trim()){
+      const q = filterText.trim().toLowerCase();
+      if(!p.nombre.toLowerCase().includes(q) && !(p.cargo||'').toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+  const filtrosActivos = !!(filterText.trim() || filterArea || filterCat);
+
   return (
     <section>
-      <div className="view-head">
+      <div className="view-head no-print">
         <div>
           <span className="eyebrow">Personal</span>
           <h2>Colaboradores</h2>
           <p className="desc">Registra al personal a evaluar en este periodo, su categoría y área. Cada colaborador recibe un código de acceso para entrar al portal.{restrictAreas ? ` Como supervisor, solo puedes registrar en: ${restrictAreas.join(', ')}.` : ''}</p>
         </div>
+        <div className="view-head-actions">
+          <button className="btn secondary small" onClick={()=>window.print()}>Imprimir</button>
+        </div>
       </div>
 
-      <div className="card">
+      <div className="card no-print">
         <h3>Agregar colaborador</h3>
         <div className="field-row three">
           <div className="field"><label>Nombre completo</label><input type="text" value={nombre} onChange={e=>setNombre(e.target.value)} placeholder="Nombre y apellido"/></div>
@@ -2056,31 +2086,118 @@ const VistaColaboradores = ({periodo, collaborators, evaluations, areas, restric
         <button className="btn" onClick={agregar}>Agregar colaborador</button>
       </div>
 
-      <div className="card" style={{marginTop:16}}>
+      <div className="card no-print" style={{marginTop:16}}>
         <h3>Listado</h3>
-        {collaborators.length===0 ? <div className="empty">Todavía no hay colaboradores registrados en este periodo{restrictAreas ? ' para tus áreas.' : '.'}</div> : collaborators.map(p=>{
+        <div className="field-row three" style={{marginBottom:14}}>
+          <div className="field"><label>Buscar</label><input type="text" value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="Nombre o cargo…"/></div>
+          <div className="field">
+            <label>Área</label>
+            <select value={filterArea} onChange={e=>setFilterArea(e.target.value)}>
+              <option value="">Todas las áreas</option>
+              {(areas||[]).map(a=><option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>Categoría</label>
+            <select value={filterCat} onChange={e=>setFilterCat(e.target.value)}>
+              <option value="">Todas las categorías</option>
+              {CATEGORIES.map(c=><option key={c.key} value={c.key}>{c.label}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {collaborators.length===0 ? (
+          <div className="empty">Todavía no hay colaboradores registrados en este periodo{restrictAreas ? ' para tus áreas.' : '.'}</div>
+        ) : filtered.length===0 ? (
+          <div className="empty">Ningún colaborador coincide con el filtro. {filtrosActivos && <button className="toggle-link" onClick={()=>{setFilterText('');setFilterArea('');setFilterCat('');}}>Quitar filtros</button>}</div>
+        ) : filtered.map(p=>{
           const initials = p.nombre.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
           const catLabel = CATEGORIES.find(c=>c.key===p.categoria)?.label || p.categoria;
           const fs = finalScoreFor(p, periodo.evaluatorWeights, periodo.componentWeights, evaluations);
+          const editando = editingId === p.id;
           return (
-            <div className="collab-item" key={p.id}>
-              <div className="collab-main">
-                <div className="avatar">{initials}</div>
-                <div>
-                  <div className="collab-name">{p.nombre}</div>
-                  <div className="collab-meta">
-                    {p.cargo || 'Sin cargo'} {p.area ? '· '+p.area : ''} · <span className="tag">{catLabel}</span>
-                    {fs.score!==null && <span className="tag moss" style={{marginLeft:6}}>Score {fs.score.toFixed(0)}</span>}
+            <div key={p.id}>
+              {editando ? (
+                <div className="collab-item" style={{flexDirection:'column', alignItems:'stretch', gap:10}}>
+                  <div className="field-row three">
+                    <div className="field"><label>Nombre completo</label><input type="text" value={editDraft.nombre} onChange={e=>setEditDraft({...editDraft, nombre:e.target.value})}/></div>
+                    <div className="field"><label>Cargo</label><input type="text" value={editDraft.cargo} onChange={e=>setEditDraft({...editDraft, cargo:e.target.value})}/></div>
+                    <div className="field">
+                      <label>Área</label>
+                      {opcionesArea.length>0 ? (
+                        <select value={editDraft.area} onChange={e=>setEditDraft({...editDraft, area:e.target.value})}>
+                          {opcionesArea.map(a=><option key={a} value={a}>{a}</option>)}
+                        </select>
+                      ) : (
+                        <input type="text" value={editDraft.area} onChange={e=>setEditDraft({...editDraft, area:e.target.value})}/>
+                      )}
+                    </div>
+                  </div>
+                  <div className="field" style={{maxWidth:300}}>
+                    <label>Categoría</label>
+                    <select value={editDraft.categoria} onChange={e=>setEditDraft({...editDraft, categoria:e.target.value})}>
+                      {CATEGORIES.map(c=><option key={c.key} value={c.key}>{c.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{display:'flex', gap:8}}>
+                    <button className="btn small" onClick={()=>saveEdit(p)}>Guardar cambios</button>
+                    <button className="btn secondary small" onClick={cancelEdit}>Cancelar</button>
                   </div>
                 </div>
-              </div>
-              <div className="collab-actions">
-                <span className="access-code">{p.accessCode}</span>
-                <button className="btn ghost small" onClick={()=>eliminar(p.id)}>Eliminar</button>
-              </div>
+              ) : (
+                <div className="collab-item">
+                  <div className="collab-main">
+                    <div className="avatar">{initials}</div>
+                    <div>
+                      <div className="collab-name">{p.nombre}</div>
+                      <div className="collab-meta">
+                        {p.cargo || 'Sin cargo'} {p.area ? '· '+p.area : ''} · <span className="tag">{catLabel}</span>
+                        {fs.score!==null && <span className="tag moss" style={{marginLeft:6}}>Score {fs.score.toFixed(0)}</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="collab-actions">
+                    <span className="access-code">{p.accessCode}</span>
+                    <button className="btn ghost small" onClick={()=>startEdit(p)}>Editar</button>
+                    <button className="btn ghost small" onClick={()=>eliminar(p.id)}>Eliminar</button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
+      </div>
+
+      {/* ===== INFORME IMPRIMIBLE — respeta los filtros activos en pantalla ===== */}
+      <div className="print-report">
+        <div className="print-page">
+          <div className="print-header">
+            <h1>{ENTIDAD_NOMBRE} — Colaboradores</h1>
+            <p>
+              Periodo: {periodo.periodoLabel || periodo.nombre} · Generado el {new Date().toLocaleDateString('es-CO', {year:'numeric', month:'long', day:'numeric'})}
+              {filtrosActivos ? ' · Lista filtrada' : ''}
+            </p>
+          </div>
+          {filtered.length===0 ? <p>Ningún colaborador coincide con el filtro aplicado.</p> : (
+            <table className="print-table">
+              <thead><tr><th>Nombre</th><th>Cargo</th><th>Área</th><th>Categoría</th><th>Código de acceso</th></tr></thead>
+              <tbody>
+                {filtered.map(p=>{
+                  const catLabel = CATEGORIES.find(c=>c.key===p.categoria)?.label || p.categoria;
+                  return (
+                    <tr key={p.id}>
+                      <td>{p.nombre}</td>
+                      <td>{p.cargo || '—'}</td>
+                      <td>{p.area || '—'}</td>
+                      <td>{catLabel}</td>
+                      <td>{p.accessCode}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -2123,14 +2240,18 @@ const VistaAsignaciones = ({periodo, collaborators, assignments, evaluations, on
 
   return (
     <section>
-      <div className="view-head">
+      <div className="view-head no-print">
         <div>
           <span className="eyebrow">Cruce de evaluadores</span>
           <h2>Asignaciones</h2>
           <p className="desc">Define quién evalúa a quién. La autoevaluación se asigna automáticamente. Cuando un colaborador entre al portal, solo verá las tareas asignadas aquí.</p>
         </div>
+        <div className="view-head-actions">
+          <button className="btn secondary small" onClick={()=>window.print()}>Imprimir</button>
+        </div>
       </div>
 
+      <div className="no-print">
       {collaborators.map(evaluado=>{
         const roleWeights = periodo.evaluatorWeights[evaluado.categoria] || {};
         const catLabel = CATEGORIES.find(c=>c.key===evaluado.categoria)?.label || evaluado.categoria;
@@ -2187,6 +2308,58 @@ const VistaAsignaciones = ({periodo, collaborators, assignments, evaluations, on
           </div>
         );
       })}
+      </div>
+
+      {/* ===== INFORME IMPRIMIBLE ===== */}
+      <div className="print-report">
+        <div className="print-page">
+          <div className="print-header">
+            <h1>{ENTIDAD_NOMBRE} — Cruce de evaluadores</h1>
+            <p>Periodo: {periodo.periodoLabel || periodo.nombre} · Generado el {new Date().toLocaleDateString('es-CO', {year:'numeric', month:'long', day:'numeric'})}</p>
+          </div>
+          {collaborators.map(evaluado=>{
+            const roleWeights = periodo.evaluatorWeights[evaluado.categoria] || {};
+            const catLabel = CATEGORIES.find(c=>c.key===evaluado.categoria)?.label || evaluado.categoria;
+            return (
+              <div key={evaluado.id} style={{marginBottom:14}}>
+                <div style={{fontSize:12.5, fontWeight:600, margin:'10px 0 4px'}}>{evaluado.nombre} — {catLabel}{evaluado.cargo?' · '+evaluado.cargo:''}</div>
+                <table className="print-table">
+                  <thead><tr><th>Rol</th><th>Evaluador(es) asignado(s)</th><th>Estado</th></tr></thead>
+                  <tbody>
+                    {Object.keys(roleWeights).map(roleKey=>{
+                      const roleLabel = ROLES.find(r=>r.key===roleKey)?.label || roleKey;
+                      if(roleKey==='autoevaluacion'){
+                        const done = evaluations.some(e=>e.collaboratorId===evaluado.id && e.role==='autoevaluacion');
+                        return (
+                          <tr key={roleKey}>
+                            <td>{roleLabel}</td>
+                            <td>Automática — el propio colaborador</td>
+                            <td>{done?'Completada':'Pendiente'}</td>
+                          </tr>
+                        );
+                      }
+                      const assigned = assignments.filter(a=>a.evaluadoId===evaluado.id && a.role===roleKey);
+                      if(assigned.length===0){
+                        return (<tr key={roleKey}><td>{roleLabel}</td><td>Sin evaluador asignado</td><td>—</td></tr>);
+                      }
+                      return assigned.map(a=>{
+                        const done = evaluations.some(e=>e.assignmentId===a.id);
+                        return (
+                          <tr key={a.id}>
+                            <td>{roleLabel}</td>
+                            <td>{a.evaluadorLabel}</td>
+                            <td>{done?'Completada':'Pendiente'}</td>
+                          </tr>
+                        );
+                      });
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </section>
   );
 };
