@@ -149,6 +149,10 @@
   .likert button{all:unset; cursor:pointer; font-family:var(--font-mono); font-size:12px; padding:8px 4px; width:64px; text-align:center; border:1px solid var(--border-strong); border-radius:var(--radius); color:var(--ink-soft); transition:all .12s;}
   .likert button:hover{border-color:var(--accent);}
   .likert button.sel{background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600;}
+  .likert button:disabled, .quiz-opts button:disabled{cursor:default; opacity:.7;}
+  .likert button:disabled:hover, .quiz-opts button:disabled:hover{border-color:var(--border-strong);}
+  .likert button.sel:disabled{opacity:1;}
+  .quiz-opts button.sel:disabled{opacity:1;}
   .likert-labels{display:flex; justify-content:space-between; font-size:10.5px; color:var(--ink-faint); margin-top:4px;}
 
   .quiz-opts{display:flex; flex-direction:column; gap:8px;}
@@ -1049,9 +1053,9 @@ const PortalTasks = ({user, tasks, config, onLogout, onOpenTask}) => (
         <div className="task-card" key={t.assignmentId}>
           <div className="tinfo">
             <b>{roleLabel}</b>
-            <div className="tmeta">{t.done ? 'Respondida — puedes editarla' : 'Pendiente por responder'}</div>
+            <div className="tmeta">{t.done ? 'Respondida — ya no se puede editar' : 'Pendiente por responder'}</div>
           </div>
-          <button className={"btn small" + (t.done ? " secondary" : "")} onClick={()=>onOpenTask(t)}>{t.done ? 'Editar' : 'Responder'}</button>
+          <button className={"btn small" + (t.done ? " secondary" : "")} onClick={()=>onOpenTask(t)}>{t.done ? 'Ver respuesta' : 'Responder'}</button>
         </div>
       );
     })}
@@ -1063,12 +1067,14 @@ const PortalForm = ({task, portalUser, config, collaborators, questionnaires, ev
   const compWeights = (config && config.componentWeights && config.componentWeights[task.role]) || {};
   const applicableComponents = COMPONENTS.filter(c=>(compWeights[c.key]||0) > 0);
   const existing = evaluations.find(e=>e.assignmentId===task.assignmentId);
+  const readOnly = !!existing; // una vez enviada, la respuesta queda fija — no se puede editar
   const [answers, setAnswers] = useState(()=> (existing && existing.answers) ? {...existing.answers} : {});
   const [saving, setSaving] = useState(false);
 
-  const setAnswer = (qid, val) => setAnswers(prev=>({...prev, [qid]: val}));
+  const setAnswer = (qid, val) => { if(readOnly) return; setAnswers(prev=>({...prev, [qid]: val})); };
 
   const submit = async () => {
+    if(readOnly) return;
     const scores = {}; let incomplete = false;
     applicableComponents.forEach(comp=>{
       const isQuiz = comp.key===QUIZ_COMPONENT;
@@ -1105,7 +1111,11 @@ const PortalForm = ({task, portalUser, config, collaborators, questionnaires, ev
       <button className="back-link" onClick={onBack}>← Volver a mis tareas</button>
       <div className="card">
         <h3>{roleLabel}</h3>
-        <p className="hint">Para las afirmaciones de comportamiento responde de 1 (muy bajo) a 5 (muy alto). Para el quiz de conocimientos, elige la opción correcta — se califica automáticamente.</p>
+        {readOnly ? (
+          <p className="hint">Ya enviaste esta respuesta — queda fija y no se puede editar. Aquí puedes revisar lo que contestaste.</p>
+        ) : (
+          <p className="hint">Para las afirmaciones de comportamiento responde de 1 (muy bajo) a 5 (muy alto). Para el quiz de conocimientos, elige la opción correcta — se califica automáticamente.</p>
+        )}
         {applicableComponents.map(comp=>{
           const isQuiz = comp.key===QUIZ_COMPONENT;
           const q = getQuestionnaireFor(questionnaires, comp.key, evaluado);
@@ -1129,7 +1139,7 @@ const PortalForm = ({task, portalUser, config, collaborators, questionnaires, ev
                       <div className="qtext">{p.texto}</div>
                       <div className="quiz-opts">
                         {p.opciones.map((o,i)=>(
-                          <button type="button" key={i} className={answers[p.id]===i ? 'sel' : ''} onClick={()=>setAnswer(p.id, i)}>{o}</button>
+                          <button type="button" key={i} disabled={readOnly} className={answers[p.id]===i ? 'sel' : ''} onClick={()=>setAnswer(p.id, i)}>{o}</button>
                         ))}
                       </div>
                     </div>
@@ -1140,7 +1150,7 @@ const PortalForm = ({task, portalUser, config, collaborators, questionnaires, ev
                     <div className="qtext">{p.texto}</div>
                     <div className="likert">
                       {[1,2,3,4,5].map(n=>(
-                        <button type="button" key={n} className={answers[p.id]===n ? 'sel' : ''} onClick={()=>setAnswer(p.id, n)}>{n}</button>
+                        <button type="button" key={n} disabled={readOnly} className={answers[p.id]===n ? 'sel' : ''} onClick={()=>setAnswer(p.id, n)}>{n}</button>
                       ))}
                     </div>
                     <div className="likert-labels"><span>Muy bajo</span><span>Muy alto</span></div>
@@ -1150,7 +1160,11 @@ const PortalForm = ({task, portalUser, config, collaborators, questionnaires, ev
             </div>
           );
         })}
-        <button className="btn" onClick={submit} disabled={saving}>{saving ? 'Enviando…' : 'Enviar respuestas'}</button>
+        {readOnly ? (
+          <button className="btn secondary" onClick={onBack}>Volver a mis tareas</button>
+        ) : (
+          <button className="btn" onClick={submit} disabled={saving}>{saving ? 'Enviando…' : 'Enviar respuestas'}</button>
+        )}
       </div>
     </div>
   );
