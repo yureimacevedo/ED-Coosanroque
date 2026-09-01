@@ -365,6 +365,21 @@ const ROLES = [
   {key:'personasACargo', label:'Personas a cargo'},
   {key:'companeroOperativo', label:'Compañero (operativo)'},
 ];
+// Las etiquetas de ROLES describen la estructura del EVALUADO (ej. "Personas a
+// cargo" = personas que reportan a él). Eso es correcto para el panel de
+// administración, pero confunde a quien está respondiendo en el portal: si tú
+// le reportas a Felipe y te toca evaluarlo, ver "Personas a cargo" te hace
+// pensar que Felipe es tu subordinado, cuando es al revés. Por eso el portal
+// usa esta redacción aparte, desde el punto de vista de quien responde.
+const PORTAL_ROLE_PHRASES = {
+  jefeInmediato: 'como colaborador/a de su equipo',
+  par: 'como su par',
+  personasACargo: 'como su jefe o líder inmediato',
+  companeroOperativo: 'como su compañero/a',
+};
+function portalRolePhrase(roleKey){
+  return PORTAL_ROLE_PHRASES[roleKey] || (ROLES.find(r=>r.key===roleKey)?.label || roleKey);
+}
 const CATEGORIES = [
   {key:'gerencia', label:'Gerencia'},
   {key:'lider', label:'Líder / colaborador con personas a cargo'},
@@ -940,7 +955,7 @@ const PortalApp = ({marca}) => {
   const getPendingTasks = (u) => {
     const tasks = [];
     const roleWeights = (config && config.evaluatorWeights && config.evaluatorWeights[u.categoria]) || {};
-    if('autoevaluacion' in roleWeights){
+    if('autoevaluacion' in roleWeights && !u.soloEvaluador){
       const done = evaluations.some(e=>e.collaboratorId===u.id && e.role==='autoevaluacion');
       tasks.push({kind:'self', assignmentId:'self-'+u.id, evaluadoId:u.id, evaluadoNombre:u.nombre, role:'autoevaluacion', done});
     }
@@ -1048,7 +1063,7 @@ const PortalTasks = ({user, tasks, config, onLogout, onOpenTask}) => (
     {tasks.length===0 ? (
       <div className="empty">No tienes evaluaciones asignadas por ahora.</div>
     ) : tasks.map(t=>{
-      const roleLabel = t.kind==='self' ? 'Autoevaluación' : `Evaluar a ${t.evaluadoNombre} — ${ROLES.find(r=>r.key===t.role)?.label}`;
+      const roleLabel = t.kind==='self' ? 'Autoevaluación' : `Evaluar a ${t.evaluadoNombre} — ${portalRolePhrase(t.role)}`;
       return (
         <div className="task-card" key={t.assignmentId}>
           <div className="tinfo">
@@ -1104,7 +1119,7 @@ const PortalForm = ({task, portalUser, config, collaborators, questionnaires, ev
     finally{ setSaving(false); }
   };
 
-  const roleLabel = task.kind==='self' ? 'Autoevaluación' : `Evaluación a ${evaluado ? evaluado.nombre : ''} — ${ROLES.find(r=>r.key===task.role)?.label}`;
+  const roleLabel = task.kind==='self' ? 'Autoevaluación' : `Evaluación a ${evaluado ? evaluado.nombre : ''} — ${portalRolePhrase(task.role)}`;
 
   return (
     <div>
@@ -2190,9 +2205,10 @@ const VistaColaboradores = ({periodo, collaborators, evaluations, areas, restric
   const opcionesArea = restrictAreas && restrictAreas.length ? restrictAreas : (areas || []);
   const [area, setArea] = useState(opcionesArea[0] || '');
   const [categoria, setCategoria] = useState(CATEGORIES[0].key);
+  const [soloEvaluador, setSoloEvaluador] = useState(false);
 
   const [editingId, setEditingId] = useState(null);
-  const [editDraft, setEditDraft] = useState({nombre:'', cargo:'', area:'', categoria:''});
+  const [editDraft, setEditDraft] = useState({nombre:'', cargo:'', area:'', categoria:'', soloEvaluador:false});
 
   const [filterText, setFilterText] = useState('');
   const [filterArea, setFilterArea] = useState('');
@@ -2204,8 +2220,8 @@ const VistaColaboradores = ({periodo, collaborators, evaluations, areas, restric
     if(!nombre.trim()){ showToast('Escribe el nombre del colaborador'); return; }
     if(opcionesArea.length>0 && !area){ showToast('Selecciona un área'); return; }
     const id = 'c_' + Date.now() + Math.random().toString(36).slice(2,6);
-    await onSave({id, nombre:nombre.trim(), cargo:cargo.trim(), area:area||'', categoria, accessCode:genCode()});
-    setNombre(''); setCargo('');
+    await onSave({id, nombre:nombre.trim(), cargo:cargo.trim(), area:area||'', categoria, soloEvaluador, accessCode:genCode()});
+    setNombre(''); setCargo(''); setSoloEvaluador(false);
     showToast('Colaborador agregado');
   };
   const eliminar = async (id) => {
@@ -2213,11 +2229,11 @@ const VistaColaboradores = ({periodo, collaborators, evaluations, areas, restric
     await onCascadeDelete(id);
   };
 
-  const startEdit = (p) => { setEditingId(p.id); setEditDraft({nombre:p.nombre, cargo:p.cargo||'', area:p.area||'', categoria:p.categoria}); };
+  const startEdit = (p) => { setEditingId(p.id); setEditDraft({nombre:p.nombre, cargo:p.cargo||'', area:p.area||'', categoria:p.categoria, soloEvaluador:!!p.soloEvaluador}); };
   const cancelEdit = () => setEditingId(null);
   const saveEdit = async (p) => {
     if(!editDraft.nombre.trim()){ showToast('Escribe el nombre del colaborador'); return; }
-    await onSave({...p, nombre:editDraft.nombre.trim(), cargo:editDraft.cargo.trim(), area:editDraft.area||'', categoria:editDraft.categoria});
+    await onSave({...p, nombre:editDraft.nombre.trim(), cargo:editDraft.cargo.trim(), area:editDraft.area||'', categoria:editDraft.categoria, soloEvaluador:editDraft.soloEvaluador});
     setEditingId(null);
     showToast('Colaborador actualizado');
   };
@@ -2268,6 +2284,10 @@ const VistaColaboradores = ({periodo, collaborators, evaluations, areas, restric
             {CATEGORIES.map(c=><option key={c.key} value={c.key}>{c.label}</option>)}
           </select>
         </div>
+        <label className="checkline" style={{marginTop:2, marginBottom:14}}>
+          <input type="checkbox" checked={soloEvaluador} onChange={e=>setSoloEvaluador(e.target.checked)}/>
+          <span>Solo evaluador — no se autoevalúa (útil para juntas, consejos u otras figuras que evalúan pero no forman parte del ciclo)</span>
+        </label>
         <button className="btn" onClick={agregar}>Agregar colaborador</button>
       </div>
 
@@ -2324,6 +2344,10 @@ const VistaColaboradores = ({periodo, collaborators, evaluations, areas, restric
                       {CATEGORIES.map(c=><option key={c.key} value={c.key}>{c.label}</option>)}
                     </select>
                   </div>
+                  <label className="checkline">
+                    <input type="checkbox" checked={editDraft.soloEvaluador} onChange={e=>setEditDraft({...editDraft, soloEvaluador:e.target.checked})}/>
+                    <span>Solo evaluador — no se autoevalúa</span>
+                  </label>
                   <div style={{display:'flex', gap:8}}>
                     <button className="btn small" onClick={()=>saveEdit(p)}>Guardar cambios</button>
                     <button className="btn secondary small" onClick={cancelEdit}>Cancelar</button>
@@ -2337,6 +2361,7 @@ const VistaColaboradores = ({periodo, collaborators, evaluations, areas, restric
                       <div className="collab-name">{p.nombre}</div>
                       <div className="collab-meta">
                         {p.cargo || 'Sin cargo'} {p.area ? '· '+p.area : ''} · <span className="tag">{catLabel}</span>
+                        {p.soloEvaluador && <span className="tag gold" style={{marginLeft:6}}>Solo evaluador</span>}
                         {fs.score!==null && <span className="tag moss" style={{marginLeft:6}}>Score {fs.score.toFixed(0)}</span>}
                       </div>
                     </div>
@@ -2446,7 +2471,7 @@ const VistaAsignaciones = ({periodo, collaborators, assignments, evaluations, on
               <div><strong>{evaluado.nombre}</strong><span className="tag" style={{marginLeft:8}}>{catLabel}</span></div>
               <span className="collab-meta">{evaluado.cargo||''}</span>
             </div>
-            {Object.keys(roleWeights).map(roleKey=>{
+            {Object.keys(roleWeights).filter(roleKey => !(roleKey==='autoevaluacion' && evaluado.soloEvaluador)).map(roleKey=>{
               const roleLabel = ROLES.find(r=>r.key===roleKey)?.label || roleKey;
               if(roleKey==='autoevaluacion'){
                 const done = evaluations.some(e=>e.collaboratorId===evaluado.id && e.role==='autoevaluacion');
@@ -2511,7 +2536,7 @@ const VistaAsignaciones = ({periodo, collaborators, assignments, evaluations, on
                 <table className="print-table">
                   <thead><tr><th>Rol</th><th>Evaluador(es) asignado(s)</th><th>Estado</th></tr></thead>
                   <tbody>
-                    {Object.keys(roleWeights).map(roleKey=>{
+                    {Object.keys(roleWeights).filter(roleKey => !(roleKey==='autoevaluacion' && evaluado.soloEvaluador)).map(roleKey=>{
                       const roleLabel = ROLES.find(r=>r.key===roleKey)?.label || roleKey;
                       if(roleKey==='autoevaluacion'){
                         const done = evaluations.some(e=>e.collaboratorId===evaluado.id && e.role==='autoevaluacion');
