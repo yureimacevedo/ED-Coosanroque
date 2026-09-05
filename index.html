@@ -385,6 +385,7 @@ const CATEGORIES = [
   {key:'lider', label:'Líder / colaborador con personas a cargo'},
   {key:'liderTransversal', label:'Líder transversal (sin personas a cargo)'},
   {key:'operativo', label:'Operativo'},
+  {key:'organosControl', label:'Órganos de Administración y Control'},
 ];
 const ROLE_COLORS = {
   autoevaluacion:'#3C5A73', jefeInmediato:'#6B7A5E', par:'#A9613D',
@@ -410,6 +411,10 @@ function defaultEvaluatorWeights(){
     lider:{autoevaluacion:20, par:20, jefeInmediato:40, personasACargo:20},
     liderTransversal:{autoevaluacion:20, par:20, jefeInmediato:60},
     operativo:{autoevaluacion:20, companeroOperativo:30, jefeInmediato:50},
+    // Consejo de Administración / Junta de Vigilancia son elegidos por la
+    // Asamblea, no tienen jefe jerárquico dentro de la estructura evaluada
+    // aquí: la evaluación es 100% autoevaluación (incluye el quiz normativo).
+    organosControl:{autoevaluacion:100},
   };
 }
 function defaultScoreConfig(){
@@ -440,6 +445,37 @@ function defaultQuestionnaireSeeds(){
       {id:'p3', texto:'El manual de ética y buen gobierno principalmente regula:', opciones:['Los horarios de atención','Los principios de conducta y transparencia de la entidad','El plan de mercadeo','Las tasas de interés'], correcta:1},
       {id:'p4', texto:'El reglamento interno de trabajo aplica a:', opciones:['Solo a la gerencia','Solo a los nuevos empleados','A todos los trabajadores de la entidad','A los proveedores externos'], correcta:2},
       {id:'p5', texto:'El SIAR (Sistema de Administración de Riesgos) tiene como propósito principal:', opciones:['Gestionar la nómina','Identificar, medir y controlar los riesgos de la entidad','Programar vacaciones','Organizar eventos internos'], correcta:1},
+    ]},
+    // --- Órganos de Administración y Control (Consejo de Administración / Junta
+    // de Vigilancia) — contenido alineado a Circular Básica Jurídica Supersolidaria,
+    // Ley 454/1998 y Guía de Buen Gobierno. Autoevaluación 100% (ver defaultEvaluatorWeights).
+    {componente:'habilidadesBlandas', area:'', categoria:'organosControl', nombre:'Ambiente de Gobierno y Ética — Órganos de Administración y Control', preguntas:[
+      {id:'p1', texto:'Conoce con suficiente anticipación la agenda de las reuniones del órgano al que pertenece.'},
+      {id:'p2', texto:'Existe confianza y armonía al interior del órgano (Consejo de Administración o Junta de Vigilancia).'},
+      {id:'p3', texto:'Las decisiones se toman previa una revisión, análisis y discusión suficiente para adoptar la mejor decisión.'},
+      {id:'p4', texto:'Existe y se aplica un procedimiento formal para declarar conflictos de interés antes de participar en una decisión.'},
+      {id:'p5', texto:'Se revisa y aplica de forma efectiva el Código de Ética y Buen Gobierno de la Cooperativa.'},
+    ]},
+    {componente:'habilidadesCore', area:'', categoria:'organosControl', nombre:'Desempeño y Cumplimiento de Funciones — Órganos de Administración y Control', preguntas:[
+      {id:'p1', texto:'Hace seguimiento periódico al Plan Estratégico y al Plan Operativo Anual (POA).'},
+      {id:'p2', texto:'Realiza un adecuado seguimiento a la gestión de riesgos implementados en la Cooperativa.'},
+      {id:'p3', texto:'Tiene claridad sobre las responsabilidades y funciones legales y estatutarias que le corresponden.'},
+      {id:'p4', texto:'Hace seguimiento a la gestión financiera y social de la Cooperativa, incluyendo el PESEM y el Balance Social.'},
+      {id:'p5', texto:'Limita su actuación al ámbito de sus funciones, sin interferir en las competencias del otro órgano de administración o control.'},
+    ]},
+    {componente:'productividad', area:'', categoria:'organosControl', nombre:'Gestión, Seguimiento y Aportes — Órganos de Administración y Control', preguntas:[
+      {id:'p1', texto:'Estudia y analiza previamente los documentos enviados para su aprobación o revisión.'},
+      {id:'p2', texto:'Participa activamente en las reuniones y realiza aportes que orientan la toma de decisiones.'},
+      {id:'p3', texto:'Hace seguimiento oportuno a las decisiones, compromisos y planes de acción que quedan pendientes.'},
+      {id:'p4', texto:'Cumplió con la asistencia a las capacitaciones programadas durante el año.'},
+      {id:'p5', texto:'Existe un canal formal de quejas y denuncias de los asociados, con seguimiento oportuno a su trámite.'},
+    ]},
+    {componente:'conocimientosBasicos', area:'', categoria:'organosControl', nombre:'Conocimiento Normativo — Órganos de Administración y Control (quiz)', preguntas:[
+      {id:'p1', texto:'¿Qué establece la Circular Básica Jurídica de la Supersolidaria respecto a la evaluación del Consejo de Administración o Junta Directiva?', opciones:['Es opcional y queda a discreción del Gerente','Debe estar aprobada en los estatutos por la Asamblea General, con periodicidad y efectos definidos','Solo aplica a cooperativas con más de 500 asociados','La realiza únicamente la Revisoría Fiscal'], correcta:1},
+      {id:'p2', texto:'Según la Ley 454 de 1998, la relación entre el Consejo de Administración y la Junta de Vigilancia es de:', opciones:['Subordinación de la Junta al Consejo','Igual jerarquía, con funciones autónomas e independientes','Subordinación del Consejo a la Junta','No existe relación entre ambos'], correcta:1},
+      {id:'p3', texto:'La función de la Junta de Vigilancia (o Comité de Control Social) se centra principalmente en:', opciones:['El control social interno de la cooperativa','La representación legal ante terceros','La aprobación del presupuesto anual','La contratación del personal administrativo'], correcta:0},
+      {id:'p4', texto:'El Sistema Integrado de Administración de Riesgos (SIAR) debe ser garantizado principalmente por:', opciones:['Solo el Revisor Fiscal','El Consejo de Administración o Junta Directiva y la alta gerencia','Únicamente el Oficial de Cumplimiento','La Asamblea General'], correcta:1},
+      {id:'p5', texto:'El Código de Ética y Buen Gobierno de la Cooperativa debe:', opciones:['Ser revisado y actualizado periódicamente por el Consejo de Administración','Redactarse una sola vez y no requerir actualización','Ser de conocimiento exclusivo de la Gerencia','Aplicar solo a los empleados operativos'], correcta:0},
     ]},
   ];
 }
@@ -831,6 +867,7 @@ const AuthGate = ({marca}) => {
         <p className="auth-panel-sub">Selecciona cómo quieres entrar.</p>
         <div className="gate-choice">
           <button className="btn" onClick={enterPortal}>Ingresar como colaborador</button>
+          <button className="btn" onClick={enterPortal}>Ingresar como Órgano de Administración y Control</button>
           <button className="btn secondary" onClick={()=>setMode('adminform')}>Ingresar como administrador</button>
         </div>
       </AuthShell>
@@ -991,7 +1028,7 @@ const PortalApp = ({marca}) => {
         <div className="brand"><div className="brand-logo-block">
             {marca?.logoDataUrl && <div className="logo-card"><Logo size={44} src={marca.logoDataUrl}/></div>}
             <span className="mark">Talento · 270°</span>
-          </div><h1>Portal de colaboradores</h1><div className="entidad-name">{ENTIDAD_NOMBRE}</div></div>
+          </div><h1>{portalUser && portalUser.categoria==='organosControl' ? 'Portal de Órganos de Administración y Control' : 'Portal de colaboradores'}</h1><div className="entidad-name">{ENTIDAD_NOMBRE}</div></div>
         <button className="back-link" style={{margin:0}} onClick={exit}>← Salir</button>
       </div>
       <div className="portal-body">
@@ -1079,25 +1116,38 @@ const PortalTasks = ({user, tasks, config, onLogout, onOpenTask}) => (
 
 const PortalForm = ({task, portalUser, config, collaborators, questionnaires, evaluations, periodoId, onBack, onDone}) => {
   const evaluado = collaborators.find(c=>c.id===task.evaluadoId);
+  // Los Órganos de Administración y Control no participan del ciclo 270°: su
+  // evaluación es siempre autoevaluación de gestión + quiz normativo, sin
+  // depender de los pesos globales de componente (que están pensados para
+  // Gerencia/Líder/Operativo). Por eso este caso ignora componentWeights y usa
+  // siempre los 4 componentes de base, agrupados en 2 secciones visibles.
+  const isOrganosControl = evaluado && evaluado.categoria === 'organosControl';
   const compWeights = (config && config.componentWeights && config.componentWeights[task.role]) || {};
   const applicableComponents = COMPONENTS.filter(c=>(compWeights[c.key]||0) > 0);
+  const managementComponents = COMPONENTS.filter(c=>c.key!==QUIZ_COMPONENT);
+  const quizComponent = COMPONENTS.find(c=>c.key===QUIZ_COMPONENT);
+  const componentsToScore = isOrganosControl ? COMPONENTS : applicableComponents;
   const existing = evaluations.find(e=>e.assignmentId===task.assignmentId);
   const readOnly = !!existing; // una vez enviada, la respuesta queda fija — no se puede editar
   const [answers, setAnswers] = useState(()=> (existing && existing.answers) ? {...existing.answers} : {});
   const [saving, setSaving] = useState(false);
 
-  const setAnswer = (qid, val) => { if(readOnly) return; setAnswers(prev=>({...prev, [qid]: val})); };
+  // Clave compuesta componente+pregunta: varios componentes reutilizan ids
+  // (p1, p2…) en sus propios cuestionarios, así que una clave plana los
+  // pisaría entre sí cuando se muestran juntos en el mismo formulario.
+  const answerKey = (compKey, qid) => compKey+'::'+qid;
+  const setAnswer = (compKey, qid, val) => { if(readOnly) return; setAnswers(prev=>({...prev, [answerKey(compKey,qid)]: val})); };
 
   const submit = async () => {
     if(readOnly) return;
     const scores = {}; let incomplete = false;
-    applicableComponents.forEach(comp=>{
+    componentsToScore.forEach(comp=>{
       const isQuiz = comp.key===QUIZ_COMPONENT;
       const q = getQuestionnaireFor(questionnaires, comp.key, evaluado);
       if(!q || q.preguntas.length===0) return;
       let sum=0, count=0;
       q.preguntas.forEach(p=>{
-        const val = answers[p.id];
+        const val = answers[answerKey(comp.key, p.id)];
         if(val===undefined){ incomplete = true; return; }
         if(isQuiz && p.opciones){ sum += (val===p.correcta ? 100 : 0); }
         else { sum += (val-1)/4*100; }
@@ -1121,6 +1171,33 @@ const PortalForm = ({task, portalUser, config, collaborators, questionnaires, ev
 
   const roleLabel = task.kind==='self' ? 'Autoevaluación' : `Evaluación a ${evaluado ? evaluado.nombre : ''} — ${portalRolePhrase(task.role)}`;
 
+  const renderPregunta = (comp, p) => {
+    const key = answerKey(comp.key, p.id);
+    if(comp.key===QUIZ_COMPONENT && p.opciones){
+      return (
+        <div className="question-block" key={key}>
+          <div className="qtext">{p.texto}</div>
+          <div className="quiz-opts">
+            {p.opciones.map((o,i)=>(
+              <button type="button" key={i} disabled={readOnly} className={answers[key]===i ? 'sel' : ''} onClick={()=>setAnswer(comp.key, p.id, i)}>{o}</button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="question-block" key={key}>
+        <div className="qtext">{p.texto}</div>
+        <div className="likert">
+          {[1,2,3,4,5].map(n=>(
+            <button type="button" key={n} disabled={readOnly} className={answers[key]===n ? 'sel' : ''} onClick={()=>setAnswer(comp.key, p.id, n)}>{n}</button>
+          ))}
+        </div>
+        <div className="likert-labels"><span>Muy bajo</span><span>Muy alto</span></div>
+      </div>
+    );
+  };
+
   return (
     <div>
       <button className="back-link" onClick={onBack}>← Volver a mis tareas</button>
@@ -1131,50 +1208,56 @@ const PortalForm = ({task, portalUser, config, collaborators, questionnaires, ev
         ) : (
           <p className="hint">Para las afirmaciones de comportamiento responde de 1 (muy bajo) a 5 (muy alto). Para el quiz de conocimientos, elige la opción correcta — se califica automáticamente.</p>
         )}
-        {applicableComponents.map(comp=>{
-          const isQuiz = comp.key===QUIZ_COMPONENT;
-          const q = getQuestionnaireFor(questionnaires, comp.key, evaluado);
-          if(!q || q.preguntas.length===0){
-            return (
-              <div className="question-block" key={comp.key}>
-                <div className="qtext" style={{fontWeight:600}}>{comp.label}</div>
-                <p className="hint">No hay preguntas configuradas para este componente todavía.</p>
-              </div>
-            );
-          }
-          return (
-            <div className="question-block" key={comp.key}>
-              <div style={{fontFamily:'var(--font-display)', fontWeight:600, marginBottom:10}}>
-                {comp.label}{isQuiz && <span className="tag moss" style={{marginLeft:8}}>Quiz</span>}
-              </div>
-              {q.preguntas.map(p=>{
-                if(isQuiz && p.opciones){
-                  return (
-                    <div className="question-block" key={p.id}>
-                      <div className="qtext">{p.texto}</div>
-                      <div className="quiz-opts">
-                        {p.opciones.map((o,i)=>(
-                          <button type="button" key={i} disabled={readOnly} className={answers[p.id]===i ? 'sel' : ''} onClick={()=>setAnswer(p.id, i)}>{o}</button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                }
+
+        {isOrganosControl ? (
+          <React.Fragment>
+            <div className="question-block">
+              <div style={{fontFamily:'var(--font-display)', fontWeight:600, marginBottom:10}}>Autoevaluación de Gestión</div>
+              {managementComponents.map(comp=>{
+                const q = getQuestionnaireFor(questionnaires, comp.key, evaluado);
+                if(!q || q.preguntas.length===0) return null;
                 return (
-                  <div className="question-block" key={p.id}>
-                    <div className="qtext">{p.texto}</div>
-                    <div className="likert">
-                      {[1,2,3,4,5].map(n=>(
-                        <button type="button" key={n} disabled={readOnly} className={answers[p.id]===n ? 'sel' : ''} onClick={()=>setAnswer(p.id, n)}>{n}</button>
-                      ))}
-                    </div>
-                    <div className="likert-labels"><span>Muy bajo</span><span>Muy alto</span></div>
+                  <div key={comp.key} style={{marginBottom:16}}>
+                    <div style={{fontWeight:500, fontSize:13, opacity:0.75, marginBottom:6}}>{q.nombre}</div>
+                    {q.preguntas.map(p=>renderPregunta(comp, p))}
                   </div>
                 );
               })}
             </div>
-          );
-        })}
+            <div className="question-block">
+              <div style={{fontFamily:'var(--font-display)', fontWeight:600, marginBottom:10}}>
+                Quiz de Conocimiento Normativo<span className="tag moss" style={{marginLeft:8}}>Quiz</span>
+              </div>
+              {(() => {
+                const q = getQuestionnaireFor(questionnaires, quizComponent.key, evaluado);
+                if(!q || q.preguntas.length===0) return <p className="hint">No hay preguntas configuradas para este componente todavía.</p>;
+                return q.preguntas.map(p=>renderPregunta(quizComponent, p));
+              })()}
+            </div>
+          </React.Fragment>
+        ) : (
+          applicableComponents.map(comp=>{
+            const isQuiz = comp.key===QUIZ_COMPONENT;
+            const q = getQuestionnaireFor(questionnaires, comp.key, evaluado);
+            if(!q || q.preguntas.length===0){
+              return (
+                <div className="question-block" key={comp.key}>
+                  <div className="qtext" style={{fontWeight:600}}>{comp.label}</div>
+                  <p className="hint">No hay preguntas configuradas para este componente todavía.</p>
+                </div>
+              );
+            }
+            return (
+              <div className="question-block" key={comp.key}>
+                <div style={{fontFamily:'var(--font-display)', fontWeight:600, marginBottom:10}}>
+                  {comp.label}{isQuiz && <span className="tag moss" style={{marginLeft:8}}>Quiz</span>}
+                </div>
+                {q.preguntas.map(p=>renderPregunta(comp, p))}
+              </div>
+            );
+          })
+        )}
+
         {readOnly ? (
           <button className="btn secondary" onClick={onBack}>Volver a mis tareas</button>
         ) : (
@@ -1196,6 +1279,7 @@ const ADMIN_TABS = [
     {key:'questionnaires', label:'Cuestionarios', num:'03', needsPeriodo:true, adminOnly:true},
     {key:'areas', label:'Áreas', num:'04', needsPeriodo:true, adminOnly:true},
     {key:'collabs', label:'Colaboradores', num:'05', needsPeriodo:true, adminOnly:false},
+    {key:'organosControl', label:'Órganos de Control', num:'05b', needsPeriodo:true, adminOnly:false},
     {key:'assign', label:'Asignaciones', num:'06', needsPeriodo:true, adminOnly:false},
     {key:'usuarios', label:'Usuarios', num:'07', needsPeriodo:true, adminOnly:true},
   ]},
@@ -1336,8 +1420,21 @@ const AdminApp = ({user, marca}) => {
           <VistaAreas periodo={periodo} onSave={savePeriodo}/>
         )}
         {vista==='collabs' && periodo && (
-          <VistaColaboradores periodo={periodo} collaborators={visibleCollaborators} evaluations={visibleEvaluations}
+          <VistaColaboradores periodo={periodo} collaborators={visibleCollaborators.filter(c=>c.categoria!=='organosControl')} evaluations={visibleEvaluations}
             areas={areas} restrictAreas={isSupervisor ? misAreas : null}
+            onSave={saveCollaborator} onDelete={deleteCollaborator}
+            onCascadeDelete={async(id)=>{
+              const evs = evaluations.filter(e=>e.collaboratorId===id);
+              const asg = assignments.filter(a=>a.evaluadoId===id || a.evaluadorId===id);
+              await deleteCollaborator(id);
+              for(const e of evs) await deleteEvaluation(e.id);
+              for(const a of asg) await deleteAssignment(a.id);
+            }}/>
+        )}
+        {vista==='organosControl' && periodo && (
+          <VistaColaboradores periodo={periodo} collaborators={visibleCollaborators.filter(c=>c.categoria==='organosControl')} evaluations={visibleEvaluations}
+            areas={areas} restrictAreas={isSupervisor ? misAreas : null}
+            lockCategoria="organosControl"
             onSave={saveCollaborator} onDelete={deleteCollaborator}
             onCascadeDelete={async(id)=>{
               const evs = evaluations.filter(e=>e.collaboratorId===id);
@@ -2199,13 +2296,14 @@ const QuizAddForm = ({onSave, onCancel}) => {
 /* =========================================================
    VISTA: COLABORADORES
    ========================================================= */
-const VistaColaboradores = ({periodo, collaborators, evaluations, areas, restrictAreas, onSave, onCascadeDelete}) => {
+const VistaColaboradores = ({periodo, collaborators, evaluations, areas, restrictAreas, lockCategoria, onSave, onCascadeDelete}) => {
   const [nombre, setNombre] = useState('');
   const [cargo, setCargo] = useState('');
   const opcionesArea = restrictAreas && restrictAreas.length ? restrictAreas : (areas || []);
   const [area, setArea] = useState(opcionesArea[0] || '');
-  const [categoria, setCategoria] = useState(CATEGORIES[0].key);
+  const [categoria, setCategoria] = useState(lockCategoria || CATEGORIES[0].key);
   const [soloEvaluador, setSoloEvaluador] = useState(false);
+  const lockLabel = lockCategoria ? (CATEGORIES.find(c=>c.key===lockCategoria)?.label || lockCategoria) : null;
 
   const [editingId, setEditingId] = useState(null);
   const [editDraft, setEditDraft] = useState({nombre:'', cargo:'', area:'', categoria:'', soloEvaluador:false});
@@ -2220,9 +2318,9 @@ const VistaColaboradores = ({periodo, collaborators, evaluations, areas, restric
     if(!nombre.trim()){ showToast('Escribe el nombre del colaborador'); return; }
     if(opcionesArea.length>0 && !area){ showToast('Selecciona un área'); return; }
     const id = 'c_' + Date.now() + Math.random().toString(36).slice(2,6);
-    await onSave({id, nombre:nombre.trim(), cargo:cargo.trim(), area:area||'', categoria, soloEvaluador, accessCode:genCode()});
+    await onSave({id, nombre:nombre.trim(), cargo:cargo.trim(), area:area||'', categoria: lockCategoria || categoria, soloEvaluador, accessCode:genCode()});
     setNombre(''); setCargo(''); setSoloEvaluador(false);
-    showToast('Colaborador agregado');
+    showToast(lockCategoria ? 'Registrado en Órganos de Administración y Control' : 'Colaborador agregado');
   };
   const eliminar = async (id) => {
     if(!window.confirm('¿Eliminar este colaborador, sus evaluaciones y asignaciones?')) return;
@@ -2233,7 +2331,7 @@ const VistaColaboradores = ({periodo, collaborators, evaluations, areas, restric
   const cancelEdit = () => setEditingId(null);
   const saveEdit = async (p) => {
     if(!editDraft.nombre.trim()){ showToast('Escribe el nombre del colaborador'); return; }
-    await onSave({...p, nombre:editDraft.nombre.trim(), cargo:editDraft.cargo.trim(), area:editDraft.area||'', categoria:editDraft.categoria, soloEvaluador:editDraft.soloEvaluador});
+    await onSave({...p, nombre:editDraft.nombre.trim(), cargo:editDraft.cargo.trim(), area:editDraft.area||'', categoria: lockCategoria || editDraft.categoria, soloEvaluador:editDraft.soloEvaluador});
     setEditingId(null);
     showToast('Colaborador actualizado');
   };
@@ -2253,9 +2351,11 @@ const VistaColaboradores = ({periodo, collaborators, evaluations, areas, restric
     <section>
       <div className="view-head no-print">
         <div>
-          <span className="eyebrow">Personal</span>
-          <h2>Colaboradores</h2>
-          <p className="desc">Registra al personal a evaluar en este periodo, su categoría y área. Cada colaborador recibe un código de acceso para entrar al portal.{restrictAreas ? ` Como supervisor, solo puedes registrar en: ${restrictAreas.join(', ')}.` : ''}</p>
+          <span className="eyebrow">{lockCategoria ? 'Máxima autoridad' : 'Personal'}</span>
+          <h2>{lockCategoria ? lockLabel : 'Colaboradores'}</h2>
+          <p className="desc">{lockCategoria
+            ? 'Registra a los integrantes del Consejo de Administración y la Junta de Vigilancia. Cada uno recibe un código de acceso personal para entrar a su portal de evaluación (autoevaluación de gestión + quiz normativo).'
+            : 'Registra al personal a evaluar en este periodo, su categoría y área. Cada colaborador recibe un código de acceso para entrar al portal.'}{restrictAreas ? ` Como supervisor, solo puedes registrar en: ${restrictAreas.join(', ')}.` : ''}</p>
         </div>
         <div className="view-head-actions">
           <button className="btn secondary small" onClick={()=>window.print()}>Imprimir</button>
@@ -2263,10 +2363,10 @@ const VistaColaboradores = ({periodo, collaborators, evaluations, areas, restric
       </div>
 
       <div className="card no-print">
-        <h3>Agregar colaborador</h3>
+        <h3>{lockCategoria ? `Agregar integrante — ${lockLabel}` : 'Agregar colaborador'}</h3>
         <div className="field-row three">
           <div className="field"><label>Nombre completo</label><input type="text" value={nombre} onChange={e=>setNombre(e.target.value)} placeholder="Nombre y apellido"/></div>
-          <div className="field"><label>Cargo</label><input type="text" value={cargo} onChange={e=>setCargo(e.target.value)} placeholder="Ej. Analista de crédito"/></div>
+          <div className="field"><label>Cargo</label><input type="text" value={cargo} onChange={e=>setCargo(e.target.value)} placeholder={lockCategoria ? 'Ej. Presidente del Consejo' : 'Ej. Analista de crédito'}/></div>
           <div className="field">
             <label>Área</label>
             {opcionesArea.length>0 ? (
@@ -2278,12 +2378,14 @@ const VistaColaboradores = ({periodo, collaborators, evaluations, areas, restric
             )}
           </div>
         </div>
-        <div className="field" style={{maxWidth:360}}>
-          <label>Categoría</label>
-          <select value={categoria} onChange={e=>setCategoria(e.target.value)}>
-            {CATEGORIES.map(c=><option key={c.key} value={c.key}>{c.label}</option>)}
-          </select>
-        </div>
+        {!lockCategoria && (
+          <div className="field" style={{maxWidth:360}}>
+            <label>Categoría</label>
+            <select value={categoria} onChange={e=>setCategoria(e.target.value)}>
+              {CATEGORIES.map(c=><option key={c.key} value={c.key}>{c.label}</option>)}
+            </select>
+          </div>
+        )}
         <label className="checkline" style={{marginTop:2, marginBottom:14}}>
           <input type="checkbox" checked={soloEvaluador} onChange={e=>setSoloEvaluador(e.target.checked)}/>
           <span>Solo evaluador — no se autoevalúa (útil para juntas, consejos u otras figuras que evalúan pero no forman parte del ciclo)</span>
