@@ -1864,20 +1864,36 @@ const VistaUsuarios = ({usuarios, supervisores, areas, currentUid, onSaveSupervi
   );
 };
 const VistaParametrizacion = ({periodo, onSave}) => {
+  // Completa con los valores de ejemplo cualquier categoría o rol que falte en
+  // lo guardado en Firestore — así un periodo creado ANTES de agregar una
+  // categoría nueva (p. ej. "Órganos de Administración y Control") no revienta
+  // esta pantalla al no encontrar esa clave.
+  const fillEvaluatorWeights = (saved) => {
+    const base = defaultEvaluatorWeights();
+    const merged = {...base, ...(saved||{})};
+    CATEGORIES.forEach(c=>{ if(!merged[c.key]) merged[c.key] = base[c.key] || {}; });
+    return merged;
+  };
+  const fillComponentWeights = (saved) => {
+    const base = defaultComponentWeights();
+    const merged = {...base, ...(saved||{})};
+    ROLES.forEach(r=>{ if(!merged[r.key]) merged[r.key] = base[r.key] || {}; });
+    return merged;
+  };
   const [periodoLabel, setPeriodoLabel] = useState(periodo.periodoLabel || periodo.nombre || '');
   const [fechaLimite, setFechaLimite] = useState(periodo.fechaLimite || '');
-  const [componentWeights, setComponentWeights] = useState(JSON.parse(JSON.stringify(periodo.componentWeights || defaultComponentWeights())));
-  const [evaluatorWeights, setEvaluatorWeights] = useState(JSON.parse(JSON.stringify(periodo.evaluatorWeights || defaultEvaluatorWeights())));
+  const [componentWeights, setComponentWeights] = useState(fillComponentWeights(JSON.parse(JSON.stringify(periodo.componentWeights || defaultComponentWeights()))));
+  const [evaluatorWeights, setEvaluatorWeights] = useState(fillEvaluatorWeights(JSON.parse(JSON.stringify(periodo.evaluatorWeights || defaultEvaluatorWeights()))));
 
   useEffect(()=>{
     setPeriodoLabel(periodo.periodoLabel || periodo.nombre || '');
     setFechaLimite(periodo.fechaLimite || '');
-    setComponentWeights(JSON.parse(JSON.stringify(periodo.componentWeights || defaultComponentWeights())));
-    setEvaluatorWeights(JSON.parse(JSON.stringify(periodo.evaluatorWeights || defaultEvaluatorWeights())));
+    setComponentWeights(fillComponentWeights(JSON.parse(JSON.stringify(periodo.componentWeights || defaultComponentWeights()))));
+    setEvaluatorWeights(fillEvaluatorWeights(JSON.parse(JSON.stringify(periodo.evaluatorWeights || defaultEvaluatorWeights()))));
   }, [periodo.id]);
 
-  const rowTotal = (roleKey) => COMPONENTS.reduce((s,c)=>s+(componentWeights[roleKey][c.key]||0),0);
-  const catTotal = (catKey) => Object.values(evaluatorWeights[catKey]).reduce((s,v)=>s+(v||0),0);
+  const rowTotal = (roleKey) => COMPONENTS.reduce((s,c)=>s+((componentWeights[roleKey]||{})[c.key]||0),0);
+  const catTotal = (catKey) => Object.values(evaluatorWeights[catKey]||{}).reduce((s,v)=>s+(v||0),0);
 
   const setCompWeight = (roleKey, compKey, val) => {
     setComponentWeights(prev=>({...prev, [roleKey]:{...prev[roleKey], [compKey]: Number(val)||0}}));
@@ -1958,7 +1974,7 @@ const VistaParametrizacion = ({periodo, onSave}) => {
             <h4>{cat.label} <span className={"row-total " + (catTotal(cat.key)===100?'ok':'bad')}>{catTotal(cat.key)}%</span></h4>
             <table><tbody>
               {ROLES.map(role=>{
-                const active = role.key in evaluatorWeights[cat.key];
+                const active = role.key in (evaluatorWeights[cat.key]||{});
                 return (
                   <tr key={role.key}>
                     <td style={{width:26}}><span className="checkline"><input type="checkbox" checked={active} onChange={e=>toggleRole(cat.key, role.key, e.target.checked)}/></span></td>
@@ -1969,7 +1985,7 @@ const VistaParametrizacion = ({periodo, onSave}) => {
               })}
             </tbody></table>
             <div className="ribbon">
-              {Object.entries(evaluatorWeights[cat.key]).map(([role,val])=> val ? <span key={role} style={{width:val+'%', background:ROLE_COLORS[role]}} title={`${role}: ${val}%`}></span> : null)}
+              {Object.entries(evaluatorWeights[cat.key]||{}).map(([role,val])=> val ? <span key={role} style={{width:val+'%', background:ROLE_COLORS[role]}} title={`${role}: ${val}%`}></span> : null)}
             </div>
           </div>
         ))}
@@ -2009,7 +2025,7 @@ const VistaParametrizacion = ({periodo, onSave}) => {
               <table className="print-table">
                 <thead><tr><th>Evaluador</th><th>Peso</th></tr></thead>
                 <tbody>
-                  {Object.entries(evaluatorWeights[cat.key]).map(([roleKey,val])=>(
+                  {Object.entries(evaluatorWeights[cat.key]||{}).map(([roleKey,val])=>(
                     <tr key={roleKey}><td>{ROLES.find(r=>r.key===roleKey)?.label || roleKey}</td><td>{val}%</td></tr>
                   ))}
                 </tbody>
