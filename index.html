@@ -483,8 +483,7 @@ function defaultQuestionnaireSeeds(){
 /* =========================================================
    SCORING ENGINE (funciones puras)
    ========================================================= */
-function scoreForEntry(entry, roleKey, componentWeights){
-  const weights = componentWeights[roleKey] || {};
+function scoreForEntry(entry, weights){
   let sum=0, wsum=0;
   COMPONENTS.forEach(c=>{
     const w = weights[c.key]||0;
@@ -492,33 +491,43 @@ function scoreForEntry(entry, roleKey, componentWeights){
   });
   return wsum>0 ? sum/wsum : null;
 }
-function roleScoresFor(collab, evaluatorWeights, componentWeights, evaluations){
+// Los pesos por componente son globales por rol (componentWeights[roleKey]) salvo
+// que la categoría del colaborador tenga su propia tabla en
+// componentWeightsByCategoria[categoria][roleKey] — hoy solo se usa para
+// "Órganos de Administración y Control", cuya autoevaluación pesa distinto que
+// la del resto del personal.
+function resolveComponentWeights(componentWeights, componentWeightsByCategoria, categoria, roleKey){
+  const override = componentWeightsByCategoria && componentWeightsByCategoria[categoria] && componentWeightsByCategoria[categoria][roleKey];
+  return override || (componentWeights[roleKey] || {});
+}
+function roleScoresFor(collab, evaluatorWeights, componentWeights, evaluations, componentWeightsByCategoria){
   const roleWeights = evaluatorWeights[collab.categoria] || {};
   const result = {};
   Object.keys(roleWeights).forEach(roleKey=>{
     const entries = evaluations.filter(e=>e.collaboratorId===collab.id && e.role===roleKey);
     if(entries.length===0){ result[roleKey]=null; return; }
-    const scores = entries.map(e=>scoreForEntry(e, roleKey, componentWeights)).filter(v=>v!==null);
+    const weights = resolveComponentWeights(componentWeights, componentWeightsByCategoria, collab.categoria, roleKey);
+    const scores = entries.map(e=>scoreForEntry(e, weights)).filter(v=>v!==null);
     result[roleKey] = scores.length ? scores.reduce((a,b)=>a+b,0)/scores.length : null;
   });
   return result;
 }
-function finalScoreFor(collab, evaluatorWeights, componentWeights, evaluations){
+function finalScoreFor(collab, evaluatorWeights, componentWeights, evaluations, componentWeightsByCategoria){
   const roleWeights = evaluatorWeights[collab.categoria] || {};
-  const rScores = roleScoresFor(collab, evaluatorWeights, componentWeights, evaluations);
+  const rScores = roleScoresFor(collab, evaluatorWeights, componentWeights, evaluations, componentWeightsByCategoria);
   let sum=0, wsum=0;
   Object.entries(roleWeights).forEach(([roleKey,w])=>{
     if(rScores[roleKey]!==null && rScores[roleKey]!==undefined){ sum += rScores[roleKey]*w; wsum += w; }
   });
   return wsum>0 ? {score:sum/wsum, coverage:wsum, roleScores:rScores} : {score:null, coverage:0, roleScores:rScores};
 }
-function componentBreakdownFor(collab, evaluatorWeights, componentWeights, evaluations){
+function componentBreakdownFor(collab, evaluatorWeights, componentWeights, evaluations, componentWeightsByCategoria){
   const roleWeights = evaluatorWeights[collab.categoria] || {};
   const totals = {}; COMPONENTS.forEach(c=>totals[c.key]={sum:0,wsum:0});
   Object.entries(roleWeights).forEach(([roleKey,evalW])=>{
     const entries = evaluations.filter(e=>e.collaboratorId===collab.id && e.role===roleKey);
     if(entries.length===0) return;
-    const compW = componentWeights[roleKey] || {};
+    const compW = resolveComponentWeights(componentWeights, componentWeightsByCategoria, collab.categoria, roleKey);
     COMPONENTS.forEach(c=>{
       const w = compW[c.key]||0; if(w<=0) return;
       const vals = entries.map(e=>e.scores && e.scores[c.key]).filter(v=>v!==undefined);
@@ -1880,20 +1889,42 @@ const VistaParametrizacion = ({periodo, onSave}) => {
     ROLES.forEach(r=>{ if(!merged[r.key]) merged[r.key] = base[r.key] || {}; });
     return merged;
   };
+  // Excepción por categoría: hoy solo "Órganos de Administración y Control"
+  // tiene su propia tabla de pesos por componente para su autoevaluación
+  // (distinta a la de Gerencia/Líder/Operativo). Si el periodo aún no tiene
+  // nada guardado para esta categoría, arranca como copia de la tabla global
+  // para que el admin la ajuste desde aquí sin partir de ceros.
+  const fillComponentWeightsByCategoria = (saved, baseComponentWeights) => {
+    const merged = {...(saved||{})};
+    if(!merged.organosControl){
+      merged.organosControl = {autoevaluacion: {...(baseComponentWeights.autoevaluacion||{})}};
+    }
+    return merged;
+  };
   const [periodoLabel, setPeriodoLabel] = useState(periodo.periodoLabel || periodo.nombre || '');
   const [fechaLimite, setFechaLimite] = useState(periodo.fechaLimite || '');
   const [componentWeights, setComponentWeights] = useState(fillComponentWeights(JSON.parse(JSON.stringify(periodo.componentWeights || defaultComponentWeights()))));
   const [evaluatorWeights, setEvaluatorWeights] = useState(fillEvaluatorWeights(JSON.parse(JSON.stringify(periodo.evaluatorWeights || defaultEvaluatorWeights()))));
+  const [componentWeightsByCategoria, setComponentWeightsByCategoria] = useState(()=>{
+    const cw = fillComponentWeights(JSON.parse(JSON.stringify(periodo.componentWeights || defaultComponentWeights())));
+    return fillComponentWeightsByCategoria(JSON.parse(JSON.stringify(periodo.componentWeightsByCategoria || {})), cw);
+  });
 
   useEffect(()=>{
     setPeriodoLabel(periodo.periodoLabel || periodo.nombre || '');
     setFechaLimite(periodo.fechaLimite || '');
-    setComponentWeights(fillComponentWeights(JSON.parse(JSON.stringify(periodo.componentWeights || defaultComponentWeights()))));
+    const cw = fillComponentWeights(JSON.parse(JSON.stringify(periodo.componentWeights || defaultComponentWeights())));
+    setComponentWeights(cw);
     setEvaluatorWeights(fillEvaluatorWeights(JSON.parse(JSON.stringify(periodo.evaluatorWeights || defaultEvaluatorWeights()))));
+    setComponentWeightsByCategoria(fillComponentWeightsByCategoria(JSON.parse(JSON.stringify(periodo.componentWeightsByCategoria || {})), cw));
   }, [periodo.id]);
 
   const rowTotal = (roleKey) => COMPONENTS.reduce((s,c)=>s+((componentWeights[roleKey]||{})[c.key]||0),0);
   const catTotal = (catKey) => Object.values(evaluatorWeights[catKey]||{}).reduce((s,v)=>s+(v||0),0);
+  const catCompRowTotal = (catKey, roleKey) => COMPONENTS.reduce((s,c)=>s+(((componentWeightsByCategoria[catKey]||{})[roleKey]||{})[c.key]||0),0);
+  const setCatCompWeight = (catKey, roleKey, compKey, val) => {
+    setComponentWeightsByCategoria(prev=>({...prev, [catKey]:{...prev[catKey], [roleKey]:{...(prev[catKey]||{})[roleKey], [compKey]: Number(val)||0}}}));
+  };
 
   const setCompWeight = (roleKey, compKey, val) => {
     setComponentWeights(prev=>({...prev, [roleKey]:{...prev[roleKey], [compKey]: Number(val)||0}}));
@@ -1911,13 +1942,15 @@ const VistaParametrizacion = ({periodo, onSave}) => {
   };
 
   const save = async () => {
-    await onSave({periodoLabel, periodo: periodoLabel, fechaLimite, componentWeights, evaluatorWeights});
+    await onSave({periodoLabel, periodo: periodoLabel, fechaLimite, componentWeights, evaluatorWeights, componentWeightsByCategoria});
     showToast('Configuración guardada');
   };
   const reset = () => {
     if(!window.confirm('¿Restaurar los valores de ejemplo? Se perderán los cambios no guardados.')) return;
-    setComponentWeights(defaultComponentWeights());
+    const cw = defaultComponentWeights();
+    setComponentWeights(cw);
     setEvaluatorWeights(defaultEvaluatorWeights());
+    setComponentWeightsByCategoria({organosControl:{autoevaluacion:{...(cw.autoevaluacion||{})}}});
   };
 
   return (
@@ -1962,6 +1995,27 @@ const VistaParametrizacion = ({periodo, onSave}) => {
                 <td className={"row-total " + (rowTotal(role.key)===100 ? 'ok':'bad')}>{rowTotal(role.key)}%</td>
               </tr>
             ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card no-print">
+        <h3>Puntaje por componente — Autoevaluación de Órganos de Administración y Control</h3>
+        <p className="hint">Esta categoría no comparte la tabla general de arriba: define aquí, aparte, cuánto pesa cada bloque en su autoevaluación (por ejemplo, un peso distinto para el quiz de conocimiento normativo).</p>
+        <table>
+          <thead><tr><th>Evaluador</th><th>Habilidades blandas</th><th>Habilidades core</th><th>Productividad</th><th>Conocimientos básicos</th><th>Total</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Autoevaluación</strong></td>
+              {COMPONENTS.map(c=>(
+                <td key={c.key}>
+                  <input type="number" min="0" max="100" className="pct-input"
+                    value={((componentWeightsByCategoria.organosControl||{}).autoevaluacion||{})[c.key] || 0}
+                    onChange={e=>setCatCompWeight('organosControl','autoevaluacion',c.key,e.target.value)}/> %
+                </td>
+              ))}
+              <td className={"row-total " + (catCompRowTotal('organosControl','autoevaluacion')===100 ? 'ok':'bad')}>{catCompRowTotal('organosControl','autoevaluacion')}%</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -2436,7 +2490,7 @@ const VistaColaboradores = ({periodo, collaborators, evaluations, areas, restric
         ) : filtered.map(p=>{
           const initials = p.nombre.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
           const catLabel = CATEGORIES.find(c=>c.key===p.categoria)?.label || p.categoria;
-          const fs = finalScoreFor(p, periodo.evaluatorWeights, periodo.componentWeights, evaluations);
+          const fs = finalScoreFor(p, periodo.evaluatorWeights, periodo.componentWeights, evaluations, periodo.componentWeightsByCategoria);
           const editando = editingId === p.id;
           return (
             <div key={p.id}>
@@ -2801,7 +2855,7 @@ const VistaResultados = ({periodo, collaborators, evaluations}) => {
   const scoreConfig = periodo.scoreConfig || defaultScoreConfig();
 
   const rows = collaborators.map(p=>({
-    p, fs: finalScoreFor(p, periodo.evaluatorWeights, periodo.componentWeights, evaluations)
+    p, fs: finalScoreFor(p, periodo.evaluatorWeights, periodo.componentWeights, evaluations, periodo.componentWeightsByCategoria)
   }));
   const evaluated = rows.filter(r=>r.fs.score!==null);
   const avg = evaluated.length ? evaluated.reduce((s,r)=>s+r.fs.score,0)/evaluated.length : null;
@@ -2869,7 +2923,7 @@ const VistaResultados = ({periodo, collaborators, evaluations}) => {
     rows.forEach(({p,fs})=>{
       const catLabel = CATEGORIES.find(c=>c.key===p.categoria)?.label || p.categoria;
       const estado = fs.score!==null ? classifySemaforo(fs.score, scoreConfig) : null;
-      const breakdown = componentBreakdownFor(p, periodo.evaluatorWeights, periodo.componentWeights, evaluations);
+      const breakdown = componentBreakdownFor(p, periodo.evaluatorWeights, periodo.componentWeights, evaluations, periodo.componentWeightsByCategoria);
       const roleWeights = periodo.evaluatorWeights[p.categoria] || {};
 
       children.push(new Paragraph({text:p.nombre, heading:HeadingLevel.HEADING_1, pageBreakBefore:true}));
@@ -2915,7 +2969,7 @@ const VistaResultados = ({periodo, collaborators, evaluations}) => {
     for(const {p,fs} of rows){
       const catLabel = CATEGORIES.find(c=>c.key===p.categoria)?.label || p.categoria;
       const estado = fs.score!==null ? classifySemaforo(fs.score, scoreConfig) : null;
-      const breakdown = componentBreakdownFor(p, periodo.evaluatorWeights, periodo.componentWeights, evaluations);
+      const breakdown = componentBreakdownFor(p, periodo.evaluatorWeights, periodo.componentWeights, evaluations, periodo.componentWeightsByCategoria);
       const roleWeights = periodo.evaluatorWeights[p.categoria] || {};
 
       const children = [
@@ -3080,7 +3134,7 @@ const VistaResultados = ({periodo, collaborators, evaluations}) => {
         {rows.map(({p,fs})=>{
           const catLabel = CATEGORIES.find(c=>c.key===p.categoria)?.label || p.categoria;
           const estado = fs.score!==null ? classifySemaforo(fs.score, scoreConfig) : null;
-          const breakdown = componentBreakdownFor(p, periodo.evaluatorWeights, periodo.componentWeights, evaluations);
+          const breakdown = componentBreakdownFor(p, periodo.evaluatorWeights, periodo.componentWeights, evaluations, periodo.componentWeightsByCategoria);
           const roleWeights = periodo.evaluatorWeights[p.categoria] || {};
           return (
             <div className="print-page" key={p.id}>
@@ -3138,7 +3192,7 @@ const VistaResultados = ({periodo, collaborators, evaluations}) => {
 };
 
 const ResultDetail = ({p, fs, periodo, evaluations}) => {
-  const breakdown = componentBreakdownFor(p, periodo.evaluatorWeights, periodo.componentWeights, evaluations);
+  const breakdown = componentBreakdownFor(p, periodo.evaluatorWeights, periodo.componentWeights, evaluations, periodo.componentWeightsByCategoria);
 
   return (
     <div className="detail-panel">
